@@ -9,7 +9,7 @@ import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 from numpy import random
 
-from Services import configProvider
+from Services import ConfigProvider
 from Services.SimexComm import SimexComm
 
 
@@ -62,30 +62,33 @@ class MockImageSource(ImageSource):
 
 
 class SimexImageSource(ImageSource):
+    configPrefix = "Simulink_ImageSource"
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.config = ConfigProvider.SettingAccessor(self.configPrefix)
 
-        self.prefix = "Simulink_ImageSource"
-        configProvider.initializeSettingSection({
-            self.prefix + "/ip": "127.0.0.1",
-            self.prefix + "/port": 11250,
-            self.prefix + "/buffer_size": 10240,
-            self.prefix + "/transpose": True,
-            self.prefix + "/transpose/type": "bool"
-        })
         self.logger = logging.getLogger("console")
-        self.transpose = configProvider.globalSettings.value(self.prefix + "/transpose", type=bool)
-        self.simexComm = SimexComm(
-            bufferSize=configProvider.globalSettings.value(self.prefix + "/buffer_size", type=int))
+        self.transpose = self.config["transpose"]
+        self.simexComm = SimexComm(bufferSize=self.config["buffer_size"])
 
         self.simexComm.errorOccured.connect(self.logError)
         self.simexComm.imageReceived.connect(self.imageReceivedCallback)
         self.simexComm.connected.connect(self.connectedCallback)
         self.simexComm.disconnected.connect(self.disconnectedCallback)
 
+    @staticmethod
+    @ConfigProvider.defaultSettingRegistration(configPrefix)
+    def defaultSettings(configPrefix):
+        ConfigProvider.defaultSettings(configPrefix, [
+            ConfigProvider.SettingRegistry("ip", "127.0.0.1"),
+            ConfigProvider.SettingRegistry("port", "11250"),
+            ConfigProvider.SettingRegistry("buffer_size", 10240, type="int", title="socket buffer size"),
+            ConfigProvider.SettingRegistry("transpose", True, type="bool"),
+        ])
+
     def start(self):
-        settings = configProvider.globalSettings
-        self.simexComm.connectToServer(settings.value(self.prefix + "/ip"), settings.value(self.prefix + "/port"))
+        settings = ConfigProvider.globalSettings
+        self.simexComm.connectToServer(self.config["ip"], self.config["port"])
 
     def stop(self):
         self.simexComm.stop()

@@ -6,7 +6,7 @@ import typing
 from PyQt5 import QtWidgets, QtGui, QtCore
 from setuptools import glob
 
-from Services import configProvider
+from Services import ConfigProvider
 from Services.ImageSources import imageSourceList
 
 
@@ -58,20 +58,25 @@ class LayoutMenu(QtWidgets.QMenu):
 
 class ImageSourceMenu(QtWidgets.QMenu):
     imageSourceChanged = QtCore.pyqtSignal(type)
+    configPrefix = "Image_Source"
 
     def __init__(self, parent=None):
         super().__init__("&Image source", parent)
-        self.configPrefix = "Image_Source"
-        configProvider.initializeSettingSection({
-            self.configPrefix + "/source": ""
-        })
+        self.config = ConfigProvider.SettingAccessor(self.configPrefix)
         self.logger = logging.getLogger("console")
         self.makeImageSourceMenu()
+
+    @staticmethod
+    @ConfigProvider.defaultSettingRegistration(configPrefix)
+    def defaultSettings(configPrefix):
+        ConfigProvider.defaultSettings(configPrefix, [
+            ConfigProvider.SettingRegistry("source", "")
+        ])
 
     @QtCore.pyqtSlot(QtWidgets.QAction)
     def agCallback(self, action: QtWidgets.QAction):
         self.imageSourceChanged.emit(imageSourceList[action.text()])
-        configProvider.globalSettings.setValue(self.configPrefix + "/source", action.text())
+        self.config["source"] = action.text()
         self.logger.info(f"Image source switched to {action.text()}")
 
     def makeImageSourceMenu(self):
@@ -81,7 +86,7 @@ class ImageSourceMenu(QtWidgets.QMenu):
         for name, imageSourceType in imageSourceList.items():
             a = QtWidgets.QAction(name)
             a.setCheckable(True)
-            if name == configProvider.globalSettings.value(self.configPrefix + "/source"):
+            if name == self.config["source"]:
                 a.setChecked(True)
             ag.addAction(a)
             self.addAction(a)
@@ -91,6 +96,3 @@ class ImageSourceMenu(QtWidgets.QMenu):
 class AnalysisMenu(QtWidgets.QMenu):
     def __init__(self, parent=None):
         super().__init__("&Analysis", parent)
-
-
-

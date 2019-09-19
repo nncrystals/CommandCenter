@@ -1,0 +1,3 @@
+[submodule "inference_service_proto"]
+	path = inference_service_proto
+	url = https://github.com/nncrystals/inference_service_proto

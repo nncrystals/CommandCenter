@@ -1,10 +1,12 @@
 import os
 import sys
 import json
+from pydoc import locate
+
 import pyqtgraph.parametertree as pgp
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-from Services import configProvider
+from Services import ConfigProvider
 
 
 # parse the config file
@@ -13,7 +15,7 @@ class ConfigDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle("Configuration")
 
-        self.config = configProvider.globalSettings
+        self.config = ConfigProvider.globalSettings
         self.pt = pgp.ParameterTree()
 
         self.setLayout(QtWidgets.QVBoxLayout())
@@ -36,10 +38,10 @@ class ConfigDialog(QtWidgets.QDialog):
 
             self.config.beginGroup(section)
             for key in self.config.childKeys():
-                value = self.config.value(key)
                 t = self.config.value(f"{key}/type", "str")
                 title = self.config.value(f"{key}/title", key)
                 default = self.config.value(f"{key}/default", None)
+                value = self.config.value(key, defaultValue=default, type=locate(t))
 
                 def valueChanged(obj: pgp.Parameter, newVal):
                     self.config.setValue(obj.name(), newVal)

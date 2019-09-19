@@ -7,7 +7,7 @@ import sys
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QDockWidget
 
-from Services import configProvider
+from Services import ConfigProvider
 from Services.ImageSources import imageSourceList
 from Widgets.ConsoleWidget import Console
 from Services.Menus import ImageSourceMenu, LayoutMenu
@@ -97,7 +97,7 @@ class MainWidget(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def connectImageSource(self):
         if self.imageSource is None:
-            self.imageSource = imageSourceList[configProvider.globalSettings.value("Image_Source/source")]()
+            self.imageSource = imageSourceList[ConfigProvider.globalSettings.value("Image_Source/source")]()
             self.wireImageSourceSignals()
 
         if self.imageSource.isRunning():

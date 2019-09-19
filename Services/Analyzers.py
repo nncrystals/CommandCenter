@@ -3,7 +3,7 @@ import logging
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-from Services import configProvider
+from Services import ConfigProvider
 from Services.InferenceComm import InferenceComm
 from inference_service_proto.inference_service_pb2 import InferenceResult
 
@@ -34,18 +34,10 @@ class GRPCRemoteAnalyzer(BaseAnalyzer):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-
-        configProvider.initializeSettingSection({
-            self.configPrefix + "/ip": "127.0.0.1",
-            self.configPrefix + "/port": 3034,
-            self.configPrefix + "/batch_size": 5,
-            self.configPrefix + "/batch_size/type": "int",
-            self.configPrefix + "/batch_size/title": "inference batch size",
-        })
-
+        self.config = ConfigProvider.SettingAccessor(self.configPrefix)
         self.logger = logging.getLogger("console")
         self.imageEncoder = tj.TurboJPEG()
-        self.inferenceComm = InferenceComm(configProvider.globalSettings.value(self.configPrefix + "/batch_size", int))
+        self.inferenceComm = InferenceComm(self.config["batch_size"])
         self.inferenceComm.errorOccurred.connect(lambda e: self.logger.error(e))
         self.inferenceComm.connected.connect(lambda: self.logger.info("GRPC remote analyzer connected"))
         self.inferenceComm.disconnected.connect(lambda: self.logger.info("GRPC remote analyzer disconnected"))
@@ -54,6 +46,15 @@ class GRPCRemoteAnalyzer(BaseAnalyzer):
         )
         self.inferenceComm.resultReady.connect(lambda r: self.resultAnalyzed.emit(r))
 
+    @staticmethod
+    @ConfigProvider.defaultSettingRegistration(configPrefix)
+    def defaultSettings(configPrefix):
+        ConfigProvider.defaultSettings(configPrefix, [
+            ConfigProvider.SettingRegistry("ip", "127.0.0.1"),
+            ConfigProvider.SettingRegistry("port", "3034"),
+            ConfigProvider.SettingRegistry("batch_size", 5, type=int, title="Inference batch size"),
+        ])
+
     def isRunning(self):
         return self.inferenceComm.isConnected
 
@@ -61,8 +62,7 @@ class GRPCRemoteAnalyzer(BaseAnalyzer):
         if self.isRunning():
             self.logger.warning("GRPC remote inference server is already connected.")
             return
-        settings = configProvider.globalSettings
-        self.inferenceComm.connectToGrpcServer(settings.value(self.configPrefix + "/ip"), self.configPrefix + "/port")
+        self.inferenceComm.connectToGrpcServer(self.config["ip"], self.config["port"])
 
     def stop(self):
         self.inferenceComm.stop()
