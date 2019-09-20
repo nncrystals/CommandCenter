@@ -1,13 +1,13 @@
 import functools
 import logging
 import os
-import typing
 
-from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5 import QtWidgets, QtCore
 from setuptools import glob
 
-from Services import ConfigProvider
-from Services.ImageSources import imageSourceList
+from Services import ConfigProvider, Analyzers
+from Services.Analyzers import analyzers, Analyzer
+from Services.ImageSources import imageSources, ImageSource
 
 
 class LayoutMenu(QtWidgets.QMenu):
@@ -57,14 +57,20 @@ class LayoutMenu(QtWidgets.QMenu):
 
 
 class ImageSourceMenu(QtWidgets.QMenu):
-    imageSourceChanged = QtCore.pyqtSignal(type)
+    imageSourceChanged = QtCore.pyqtSignal()
     configPrefix = "Image_Source"
 
     def __init__(self, parent=None):
         super().__init__("&Image source", parent)
         self.config = ConfigProvider.SettingAccessor(self.configPrefix)
         self.logger = logging.getLogger("console")
-        self.makeImageSourceMenu()
+        self.imageSourceListMenu = QtWidgets.QMenu("&Image source", self)
+        self.addMenu(self.imageSourceListMenu)
+
+        # lazy initialization because the external signal should be connected first. Otherwise the image may not display
+        th = QtCore.QThread(self)
+        th.started.connect(self.initMenu)
+        th.start()
 
     @staticmethod
     @ConfigProvider.defaultSettingRegistration(configPrefix)
@@ -73,26 +79,115 @@ class ImageSourceMenu(QtWidgets.QMenu):
             ConfigProvider.SettingRegistry("source", "")
         ])
 
+    @QtCore.pyqtSlot()
+    def initMenu(self):
+        self.makeImageSourceMenu()
+        self.addAction("C&onnect").triggered.connect(self.connectImageSource)
+        self.addAction("&Disconnect").triggered.connect(self.disconnectImageSource)
+
+    @QtCore.pyqtSlot()
+    def connectImageSource(self):
+        if ImageSource.imageSourceInstance is None:
+            self.logger.error("Image source is not selected")
+            return
+
+        if ImageSource.imageSourceInstance.isRunning():
+            self.logger.warning("Image source is already connected. Ignore connect request.")
+            return
+
+        ImageSource.imageSourceInstance.start()
+
+    @QtCore.pyqtSlot()
+    def disconnectImageSource(self):
+        if ImageSource.imageSourceInstance is None or not ImageSource.imageSourceInstance.isRunning():
+            self.logger.warning("Image source is not connected.")
+            return
+        ImageSource.imageSourceInstance.stop()
+        ImageSource.imageSourceInstance = None
+
     @QtCore.pyqtSlot(QtWidgets.QAction)
     def agCallback(self, action: QtWidgets.QAction):
-        self.imageSourceChanged.emit(imageSourceList[action.text()])
+        if ImageSource.imageSourceInstance is not None and ImageSource.imageSourceInstance.isRunning():
+            ImageSource.imageSourceInstance.stop()
+        ImageSource.imageSourceInstance = imageSources[action.text()]()
         self.config["source"] = action.text()
         self.logger.info(f"Image source switched to {action.text()}")
+        self.imageSourceChanged.emit()
 
     def makeImageSourceMenu(self):
-        self.clear()
-        ag = QtWidgets.QActionGroup(self)
+        self.imageSourceListMenu.clear()
+        ag = QtWidgets.QActionGroup(self.imageSourceListMenu)
         ag.setExclusive(True)
-        for name, imageSourceType in imageSourceList.items():
+        ag.triggered.connect(self.agCallback)
+        for name, imageSourceType in imageSources.items():
             a = QtWidgets.QAction(name)
             a.setCheckable(True)
+            ag.addAction(a)
             if name == self.config["source"]:
+                a.trigger()
+            self.imageSourceListMenu.addAction(a)
+
+
+class AnalyzerMenu(QtWidgets.QMenu):
+    analyzerChanged = QtCore.pyqtSignal()
+    configPrefix = "Analyzers"
+
+    def __init__(self, parent=None):
+        super().__init__("Ana&lyzers", parent)
+        self.config = ConfigProvider.SettingAccessor(self.configPrefix)
+        self.logger = logging.getLogger("console")
+        self.analyzerChoiceMenu = QtWidgets.QMenu("Ana&lyzers", self)
+        self.addMenu(self.analyzerChoiceMenu)
+        self.makeAnalyzerMenu()
+        self.addAction("&Connect").triggered.connect(self.connectAnalyzer)
+        self.addAction("&Disconnect").triggered.connect(self.disconnectAnalyzer)
+
+    @staticmethod
+    @ConfigProvider.defaultSettingRegistration(configPrefix)
+    def defaultSettings(configPrefix):
+        ConfigProvider.defaultSettings(configPrefix, [
+            ConfigProvider.SettingRegistry("analyzer", "")
+        ])
+
+    @QtCore.pyqtSlot(QtWidgets.QAction)
+    def agCallback(self, action: QtWidgets.QAction):
+        if Analyzer.instance is not None and Analyzer.instance.isRunning():
+            Analyzer.instance.stop()
+        Analyzer.instance = analyzers[action.text()]()
+
+        self.config["analyzer"] = action.text()
+        self.logger.info(f"Analyzer switched to {action.text()}")
+        self.analyzerChanged.emit()
+
+    def makeAnalyzerMenu(self):
+        self.analyzerChoiceMenu.clear()
+        ag = QtWidgets.QActionGroup(self)
+        ag.setExclusive(True)
+        for name, analyzerType in analyzers.items():
+            a = QtWidgets.QAction(name)
+            a.setCheckable(True)
+            if name == self.config["analyzer"]:
                 a.setChecked(True)
             ag.addAction(a)
-            self.addAction(a)
+            self.analyzerChoiceMenu.addAction(a)
         ag.triggered.connect(self.agCallback)
 
+    @QtCore.pyqtSlot()
+    def connectAnalyzer(self):
+        if Analyzer.instance is None:
+            self.logger.error("Analyzer is not selected")
+            return
 
-class AnalysisMenu(QtWidgets.QMenu):
-    def __init__(self, parent=None):
-        super().__init__("&Analysis", parent)
+        if Analyzer.instance.isRunning():
+            self.logger.warning("Analyzer is already connected. Ignore connect request.")
+            return
+
+        Analyzer.instance.start()
+
+    @QtCore.pyqtSlot()
+    def disconnectAnalyzer(self):
+        if Analyzer.instance is None or not Analyzer.instance.isRunning():
+            self.logger.warning("Analyzer is not connected.")
+            return
+        Analyzer.instance.stop()
+        Analyzer.instance = None

@@ -8,9 +8,9 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import QDockWidget
 
 from Services import ConfigProvider
-from Services.ImageSources import imageSourceList
+from Services.ImageSources import imageSources, ImageSource
 from Widgets.ConsoleWidget import Console
-from Services.Menus import ImageSourceMenu, LayoutMenu
+from Services.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu
 from Widgets.ConfigDialog import ConfigDialog
 from Widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from Widgets.ImageDisplayWidget import ImageDisplayWidget
@@ -22,7 +22,6 @@ class MainWidget(QtWidgets.QMainWindow):
         # declaration
         self.layoutDirectory = os.path.abspath(os.path.join("Configs", "Layouts"))
         self.dockedPanels = None
-        self.connectionSubMenu = ImageSourceMenu(self)
         self.logger = logging.getLogger("console")
         self.imageSource = None
 
@@ -36,13 +35,10 @@ class MainWidget(QtWidgets.QMainWindow):
 
     def initMenu(self):
         menuBar = self.menuBar()
-        imageSourceMenu = menuBar.addMenu("&Image source")
-        imageSourceMenu.addMenu(self.connectionSubMenu)
-
-        connectionConnectAction = imageSourceMenu.addAction("C&onnect")
-        connectionConnectAction.triggered.connect(self.connectImageSource)
-        connectionConnectAction = imageSourceMenu.addAction("&Disconnect")
-        connectionConnectAction.triggered.connect(self.disconnectImageSource)
+        imageSourceMenu = ImageSourceMenu(self)
+        imageSourceMenu.imageSourceChanged.connect(self.wireImageSourceToDisplay)
+        menuBar.addMenu(imageSourceMenu)
+        menuBar.addMenu(AnalyzerMenu(self))
 
         menuBar.addMenu(LayoutMenu(self.layoutDirectory, self))
 
@@ -75,9 +71,6 @@ class MainWidget(QtWidgets.QMainWindow):
 
         self.applyDefaultLayout()
 
-    def wireImageSourceSignals(self):
-        assert self.imageSource is not None
-        self.imageSource.imagesReady.connect(self.dockedPanels["input"].widget().updateImage)
 
     @QtCore.pyqtSlot()
     def applyDefaultLayout(self):
@@ -92,28 +85,12 @@ class MainWidget(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot()
     def showConnectionConfigDialog(self):
         dialog = ConfigDialog(self)
-        dialog.show()
+        dialog.exec()
 
     @QtCore.pyqtSlot()
-    def connectImageSource(self):
-        if self.imageSource is None:
-            self.imageSource = imageSourceList[ConfigProvider.globalSettings.value("Image_Source/source")]()
-            self.wireImageSourceSignals()
+    def wireImageSourceToDisplay(self):
+        ImageSource.imageSourceInstance.imagesReady.connect(self.dockedPanels["input"].widget().updateImage)
 
-        if self.imageSource.isRunning():
-            self.logger.warning("Image source is already connected. Ignore connect request.")
-            return
-
-        self.imageSource.start()
-
-
-    @QtCore.pyqtSlot()
-    def disconnectImageSource(self):
-        if self.imageSource is None or not self.imageSource.isRunning():
-            self.logger.warning("Image source is not connected.")
-            return
-        self.imageSource.stop()
-        self.imageSource = None
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)

@@ -12,9 +12,12 @@ from numpy import random
 from Services import ConfigProvider
 from Services.SimexComm import SimexComm
 
+import rx.subject as rxSubject
+
 
 class ImageSource(QtCore.QObject):
     imagesReady = QtCore.pyqtSignal(np.ndarray)
+    imageSourceInstance = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,6 +31,7 @@ class ImageSource(QtCore.QObject):
     def isRunning(self):
         pass
 
+
 class MockImageSource(ImageSource):
     def __init__(self, parent=None, fps=5):
         super().__init__(parent)
@@ -40,7 +44,7 @@ class MockImageSource(ImageSource):
     @staticmethod
     def _sourceImages():
         imgPaths = glob.glob("TestImages/*.png")
-        images = [np.asarray(Image.open(image))[:,:,0].T for image in imgPaths]
+        images = [np.asarray(Image.open(image))[:, :, 0].T for image in imgPaths]
         return images
 
     @QtCore.pyqtSlot()
@@ -63,6 +67,7 @@ class MockImageSource(ImageSource):
 
 class SimexImageSource(ImageSource):
     configPrefix = "Simulink_ImageSource"
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = ConfigProvider.SettingAccessor(self.configPrefix)
@@ -117,7 +122,8 @@ class SimexImageSource(ImageSource):
     def disconnectedCallback(self):
         self.logger.info("Simulink image server disconnected")
 
-imageSourceList = {
+imageSources = {
     "Test": MockImageSource,
     "Simulink": SimexImageSource,
 }
+

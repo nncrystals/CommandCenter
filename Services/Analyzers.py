@@ -10,8 +10,10 @@ from inference_service_proto.inference_service_pb2 import InferenceResult
 import turbojpeg as tj
 
 
-class BaseAnalyzer(QtCore.QObject):
+class Analyzer(QtCore.QObject):
     resultAnalyzed = QtCore.pyqtSignal(InferenceResult)
+
+    instance = None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,9 +30,26 @@ class BaseAnalyzer(QtCore.QObject):
     def feedImage(self, images: typing.Iterable[np.ndarray]):
         pass
 
+class MockAnalyzer(Analyzer):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._isRunning = False
 
-class GRPCRemoteAnalyzer(BaseAnalyzer):
-    configPrefix = "GRPCRemoteAnalyzer"
+    def isRunning(self):
+        return self._isRunning
+
+    def start(self):
+        self._isRunning = True
+
+    def stop(self):
+        self._isRunning = False
+
+    def feedImage(self, images: typing.Iterable[np.ndarray]):
+        super().feedImage(images)
+
+
+class GRPCRemoteAnalyzer(Analyzer):
+    configPrefix = "GRPC_Remote_Analyzer"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,7 +71,7 @@ class GRPCRemoteAnalyzer(BaseAnalyzer):
         ConfigProvider.defaultSettings(configPrefix, [
             ConfigProvider.SettingRegistry("ip", "127.0.0.1"),
             ConfigProvider.SettingRegistry("port", "3034"),
-            ConfigProvider.SettingRegistry("batch_size", 5, type=int, title="Inference batch size"),
+            ConfigProvider.SettingRegistry("batch_size", 5, type="int", title="Inference batch size"),
         ])
 
     def isRunning(self):
@@ -70,3 +89,8 @@ class GRPCRemoteAnalyzer(BaseAnalyzer):
     def feedImage(self, images: typing.Iterable[np.ndarray]):
         images = [self.imageEncoder.encode(image, quality=90, pixel_format=tj.TJPF_GRAY) for image in images]
         self.inferenceComm.feedImages(images)
+
+
+analyzers = {
+    "GRPCRemoteAnalyzer": GRPCRemoteAnalyzer,
+}
