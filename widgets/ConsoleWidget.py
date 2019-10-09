@@ -1,10 +1,9 @@
 import datetime
 import logging
-import pyqtgraph as pg
 import pyqtgraph.console as pgc
-from PyQt5 import QtWidgets, QtGui, QtCore
+from PyQt5 import QtWidgets, QtCore
 
-from Services.QtInterceptHandler import QtInterceptHandler
+from utils.QtInterceptHandler import QtInterceptHandler
 
 
 class Console(pgc.ConsoleWidget):

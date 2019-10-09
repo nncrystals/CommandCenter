@@ -4,7 +4,7 @@ from unittest import TestCase
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-from Widgets.HistogramDisplayWidgets import AreaDisplayWidget
+from widgets.HistogramDisplayWidgets import AreaDisplayWidget
 
 
 class TestAreaDisplayWidget(TestCase):

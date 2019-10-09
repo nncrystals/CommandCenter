@@ -2,7 +2,7 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt5 import QtCore
 
-import Services.ConfigProvider as configProvider
+import services.config as configProvider
 
 
 class PlotWidget(pg.PlotWidget):
@@ -18,14 +18,14 @@ class AreaDisplayWidget(PlotWidget):
         self.config = configProvider.SettingAccessor(AreaDisplayWidget.configPrefix)
 
     @staticmethod
-    @configProvider.defaultSettingRegistration(configPrefix)
+    @configProvider.DefaultSettingRegistration(configPrefix)
     def defaultSettings(configPrefix):
-        configProvider.defaultSettings(configPrefix, [
+        configProvider.default_settings(configPrefix, [
             configProvider.SettingRegistry("bins", 30, type="int", title="Bins")
         ])
 
     @QtCore.pyqtSlot(np.ndarray)
-    def updateHistogram(self, arr: np.ndarray):
+    def updateHistogram(self, arr: list):
         y, x = np.histogram(arr, self.config["bins"])
         self.plotItem.clear()
         self.plotItem.plot(x, y, stepMode=True, fillLevel=0, brush=(0, 0, 255, 150))
@@ -39,14 +39,16 @@ class EllipsesDisplayWidget(PlotWidget):
         self.config = configProvider.SettingAccessor(EllipsesDisplayWidget.configPrefix)
 
     @staticmethod
-    @configProvider.defaultSettingRegistration(configPrefix)
+    @configProvider.DefaultSettingRegistration(configPrefix)
     def defaultSettings(configPrefix):
-        configProvider.defaultSettings(configPrefix, [
+        configProvider.default_settings(configPrefix, [
             configProvider.SettingRegistry("bins", 30, type="int", title="Bins")
         ])
 
     @QtCore.pyqtSlot(np.ndarray, np.ndarray)
-    def updateHistograms(self, major: np.ndarray, minor: np.ndarray):
+    def updateHistograms(self, data):
+        data = np.asarray(data)
+        major, minor = data[:,0], data[:,1]
         yMaj, xMaj = np.histogram(major, self.config["bins"])
         yMin, xMin = np.histogram(minor, self.config["bins"])
         self.plotItem.clear()

@@ -8,7 +8,23 @@ from PIL import Image
 
 from PyQt5 import QtWidgets, QtCore, QtGui, QtNetwork
 import pyqtgraph as pg
-import requests
+
+
+class SimpleDisplayWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QtWidgets.QVBoxLayout()
+        self.setLayout(layout)
+        self.imageItem = pg.ImageItem()
+        self.imageItem.setOpts(axisOrder='row-major')
+        self.imageWidget = pg.GraphicsView()
+        self.view = pg.ViewBox(lockAspect=True, invertY=True)
+        self.imageWidget.setCentralItem(self.view)
+        self.view.addItem(self.imageItem)
+        layout.addWidget(self.imageWidget)
+
+    def updateImage(self, image: np.ndarray):
+        self.imageItem.setImage(image, False)
 
 
 class ImageDisplayWidget(QtWidgets.QWidget):
@@ -17,17 +33,20 @@ class ImageDisplayWidget(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
         self.imageItem = pg.ImageItem()
+        self.imageItem.setOpts(axisOrder='row-major')
         self.imageWidget = pg.ImageView(self, imageItem=self.imageItem)
         self.imageWidget.ui.menuBtn.hide()
         self.imageWidget.ui.roiBtn.hide()
         layout.addWidget(self.imageWidget)
 
-    @QtCore.pyqtSlot(np.ndarray)
     def updateImage(self, image: np.ndarray):
         self.imageItem.setImage(image)
 
 
 if __name__ == '__main__':
+    import requests
+
+
     class ImageRequestWorker(QtCore.QThread):
         imageReady = QtCore.pyqtSignal(np.ndarray)
 

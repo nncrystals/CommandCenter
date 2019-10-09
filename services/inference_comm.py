@@ -4,42 +4,39 @@ import time
 import typing
 import grpc
 
+from rx import subject
+from rx import operators
+
+from DataObject.DetectedObject import DetectedObject
 from DataObject.InferenceStats import InferenceStats
 from inference_service_proto import inference_service_pb2_grpc as grpc_service
 from inference_service_proto import inference_service_pb2 as grpc_def
-
+from pycocotools import mask as mask_util
 from PyQt5 import QtWidgets, QtGui, QtCore
 
 
 class InferenceComm(QtCore.QObject):
-    resultReady = QtCore.pyqtSignal(grpc_def.InferenceResult)
-    connected = QtCore.pyqtSignal()
-    disconnected = QtCore.pyqtSignal()
-    errorOccurred = QtCore.pyqtSignal(str)
-    statsEmitted = QtCore.pyqtSignal()
+    connection_chan = subject.BehaviorSubject(False)
+    result_chan = subject.Subject()
+    error_chan = subject.Subject()
+    stats_chan = subject.Subject()
 
-    def __init__(self, batchSize=5, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.channel = None
         self.stub: grpc_service.InferenceStub
-        self.isConnected = False
-        self.req = grpc_def.ImageBatchRequest()
-        self.req.opt.num_image_returned = 1
-        self.startTimeQueue = []
 
-        self.batchSize = batchSize
+        self.start_time_queue = []
 
     def onConnectStateChange(self, state: grpc.ChannelConnectivity):
         if state == grpc.ChannelConnectivity.READY:
-            self.connected.emit()
-            self.isConnected = True
+            self.connection_chan.on_next(True)
         if state == grpc.ChannelConnectivity.TRANSIENT_FAILURE or state == grpc.ChannelConnectivity.SHUTDOWN:
             if self.isConnected:
-                self.disconnected.emit()
-                self.isConnected = False
+                self.connection_chan.on_next(False)
 
     def connectToGrpcServer(self, ip, port):
-        if self.isConnected:
+        if self.connection_chan.value:
             return
 
         if self.channel is not None:
@@ -52,42 +49,56 @@ class InferenceComm(QtCore.QObject):
 
     def inferenceDoneCallback(self, future: grpc.Future):
         inferenceResult: grpc_def.InferenceResult = future.result(None)
-        elapsedTime = time.time() - self.startTimeQueue.pop(0)
+        elapsedTime = time.time() - self.start_time_queue.pop(0)
         numProcessedImages = len(inferenceResult.result)
 
         stats = InferenceStats(numProcessedImages, elapsedTime)
-        self.statsEmitted.emit(stats)
+        self.stats_chan.on_next(stats)
 
         # notify new detections
-        self.resultReady.emit(inferenceResult)
+        self.result_chan.on_next(inferenceResult)
+
+    def clean(self):
+        if self.channel:
+            self.channel.close()
 
     def stop(self):
-        self.channel.close()
-        self.isConnected = False
-        self.disconnected.emit()
+        if self.connection_chan.value:
+            self.clean()
+            self.connection_chan.on_next(False)
 
-    @QtCore.pyqtSlot(object)
-    def feedImages(self, images: typing.Iterable[bytes]):
-        if not self.isConnected:
-            self.errorOccurred.emit("Server is not connected. Cannot feed image.")
+    def feedImages(self, imagesAndName):
+        if not self.connection_chan.value:
+            self.error_chan.on_next("Server is not connected. Cannot feed image.")
             return
 
-        if isinstance(images, bytes):
-            images = [images]
+        req = grpc_def.ImageBatchRequest()
+        req.opt.num_image_returned = 1
 
-        for image in images:
-            name = time.time_ns()
+        for image, name in imagesAndName:
             req_img = grpc_def.Image()
-            req_img.name = f"{name}.jpg"
+            req_img.name = name
             req_img.images_data = image
-            self.req.images.append(req_img)
+            req.images.append(req_img)
 
-        if len(self.req.images) >= self.batchSize:
-            self.req.opt.num_image_returned = 1
-            self.startTimeQueue.append(time.time())
-            resp: grpc.Future = self.stub.Inference.future(self.req)
-            resp.add_done_callback(self.inferenceDoneCallback)
-            self.req.Clear()
+        self.start_time_queue.append(time.time())
+        resp: grpc.Future = self.stub.Inference.future(req)
+        resp.add_done_callback(self.inferenceDoneCallback)
+
+    @staticmethod
+    def toDetectedObject(detection: grpc_def.Detection):
+        detected_object = DetectedObject()
+        rle = {
+            "counts": detection.rle.counts,
+            "size": list(detection.rle.size),
+        }
+        bbox = detection.bbox
+        detected_object.label = detection.category
+        detected_object.maskRLE = rle
+        detected_object.mask = mask_util.decode(rle)
+        detected_object.bbox = (bbox.xlt, bbox.ylt, bbox.xrb, bbox.yrb)
+        detected_object.score = detection.confidence
+        return detected_object
 
 
 if __name__ == '__main__':

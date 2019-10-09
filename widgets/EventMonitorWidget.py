@@ -5,7 +5,7 @@ import time
 from PyQt5 import QtWidgets, QtCore, QtGui
 import logging
 
-from Services.QtInterceptHandler import QtInterceptHandler
+from utils.QtInterceptHandler import QtInterceptHandler
 
 
 class EventEntry(QtWidgets.QWidget):
