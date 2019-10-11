@@ -7,7 +7,7 @@ from rx import operators
 from rx import subject
 
 import services.service_provider
-from DataObject.DetectedObject import DetectedObject
+from data_class.detected_objects import DetectedObject
 from inference_service_proto.inference_service_pb2 import ResultPerImage
 from services import config
 from services.inference_result_render import render_inference

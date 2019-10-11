@@ -37,12 +37,21 @@ class ImageSource(object):
 
 
 class MockImageSource(ImageSource):
-    def __init__(self, fps=5):
+    config_prefix = "Test_Images"
+    def __init__(self):
         super().__init__()
-        self.fps = fps
+        self.config = config.SettingAccessor(self.config_prefix)
+        self.fps = self.config["fps"]
         self.images = self._sourceImages()
         self._stop = subject.Subject()
         self.running = False
+
+    @staticmethod
+    @config.DefaultSettingRegistration(config_prefix)
+    def defaultSettings(configPrefix):
+        config.default_settings(configPrefix, [
+            config.SettingRegistry("fps", 5, type="int"),
+        ])
 
     @staticmethod
     def _sourceImages():
@@ -56,6 +65,7 @@ class MockImageSource(ImageSource):
         return img
 
     def start(self):
+        self.fps = self.config["fps"]
         rx.interval(1 / self.fps).pipe(
             operators.map(lambda x: self.generate_image()),
             operators.take_until(self._stop),
