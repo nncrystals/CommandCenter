@@ -10,7 +10,6 @@ from rx import subject
 
 import inference_service_proto.inference_service_pb2 as grpc_def
 import services.service_provider
-from inference_service_proto.inference_service_pb2 import Image
 from services import config
 from services.inference_comm import InferenceComm
 from services.subjects import Subjects
@@ -61,10 +60,19 @@ class RemoteAnalyzer(Analyzer):
     def configure_subscriptions(self, connected):
         if connected:
             self.subjects.image_producer \
+                .pipe(operators.filter(self.inference_comm.back_pressure_detection)) \
                 .pipe(operators.buffer_with_count(self.batch_size)) \
                 .pipe(operators.subscribe_on(self.feed_scheduler)) \
                 .pipe(operators.take_until(self._stop)) \
                 .subscribe(self.feed_image)
+
+            self.subjects.image_producer \
+                .pipe(operators.filter(lambda x: not self.inference_comm.back_pressure_detection(x))) \
+                .pipe(operators.throttle_first(1)) \
+                .pipe(operators.take_until(self._stop)) \
+                .subscribe(lambda x: self.logger.warning(
+                    "Back pressure detected. Some frames were dropped. Please reduce the image acquisition fps."
+                ))
 
             self.inference_comm.result_chan \
                 .pipe(operators.subscribe_on(self.process_scheduler), operators.take_until(self._stop)) \
@@ -78,7 +86,6 @@ class RemoteAnalyzer(Analyzer):
                 ))
             self.inference_comm.stats_chan.take_until(self._stop).subscribe(
                 lambda x: self.logger.info(f"Processed {x.frame} frames. Average {x.processTime / x.frame} secs"))
-            # self.inference_comm.stats_chan.take_until(self._stop).subscribe(Analyzer.analysis_stats_chan)
 
     def is_running(self):
         return self.inference_comm.connection_chan.value
@@ -89,7 +96,7 @@ class RemoteAnalyzer(Analyzer):
             return
         self.inference_comm.connection_chan.pipe(operators.take_until(self._stop)).subscribe(
             self.configure_subscriptions)
-        self.inference_comm.connectToGrpcServer(self.config["ip"], self.config["port"])
+        self.inference_comm.connect_to_grpc_server(self.config["ip"], self.config["port"])
 
     def clean(self):
         self.inference_comm.stop()
@@ -109,7 +116,7 @@ class RemoteAnalyzer(Analyzer):
             for im, name in images:
                 self.subjects.images_to_save.on_next({"data": im, "name": name})
 
-            self.inference_comm.feedImages(images)
+            self.inference_comm.feed_images(images)
         except Exception as e:
             self.logger.error(f"Failed to feed image: {e}")
 
@@ -126,7 +133,7 @@ class RemoteAnalyzer(Analyzer):
         for results_per_image in result.result:
             results = []
             for detection in results_per_image.detections:
-                detected_object = InferenceComm.toDetectedObject(detection)
+                detected_object = InferenceComm.to_detected_object(detection)
                 results.append(detected_object)
             image_id = results_per_image.image_id
             self.subjects.detection_result.on_next((results, image_id))
