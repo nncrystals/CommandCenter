@@ -3,9 +3,11 @@ import os
 import msgpack
 from rx import operators, subject
 
+from data_class.subject_data import TimelineDataPoint, DetectionsInImage, AcquiredImage
 from services import config
 import services.service_provider
 from services.subjects import Subjects
+from utils.observer import ErrorToConsoleObserver
 
 
 class ResultSaver(object):
@@ -17,19 +19,23 @@ class ResultSaver(object):
         self._stop = subject.Subject()
         self.config = config.SettingAccessor(self.config_prefix)
         self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
-        self.subjects.images_to_save.pipe(
-            operators.filter(self.image_save_enabled_filter),
+        self.subjects.image_producer.pipe(
+            operators.filter(self.config_enabled_filter("save_images")),
             operators.take_until(self._stop),
-        ).subscribe(self.save_image)
+        ).subscribe(ErrorToConsoleObserver(self.save_image))
         self.subjects.detection_result.pipe(
-            operators.filter(self.label_save_enabled_filter),
+            operators.filter(self.config_enabled_filter("save_labels")),
             operators.take_until(self._stop),
-        ).subscribe(self.save_labels)
+        ).subscribe(ErrorToConsoleObserver(self.save_labels))
+        self.subjects.add_to_timeline.pipe(
+            operators.filter(self.config_enabled_filter("save_events")),
+            operators.take_until(self._stop),
+        ).subscribe(ErrorToConsoleObserver(self.save_timeline_events))
 
         config.setting_updated_channel.pipe(
             operators.filter(self._directory_filter),
             operators.take_until(self._stop),
-        ).subscribe(lambda x: self.initialize_saving_directory())
+        ).subscribe(ErrorToConsoleObserver(lambda x: self.initialize_saving_directory()))
 
         self.initialize_saving_directory()
 
@@ -37,9 +43,10 @@ class ResultSaver(object):
     @config.DefaultSettingRegistration(config_prefix)
     def default_settings(configPrefix):
         config.default_settings(configPrefix, [
-            config.SettingRegistry("enabled", False, type="bool", title="Enable"),
-            config.SettingRegistry("save_image", True, type="bool", title="Save image"),
+            config.SettingRegistry("enabled", False, type="bool", title="Enable data saving"),
+            config.SettingRegistry("save_images", True, type="bool", title="Save image"),
             config.SettingRegistry("save_labels", True, type="bool", title="Save labels"),
+            config.SettingRegistry("save_events", True, type="bool", title="Save events"),
             config.SettingRegistry("directory", "/tmp", type="str", title="Save directory")
         ])
 
@@ -53,35 +60,38 @@ class ResultSaver(object):
 
     def initialize_saving_directory(self):
         path = self.config["directory"]
-        imageDir = os.path.join(path, "images")
-        labelDir = os.path.join(path, "labels")
 
         os.makedirs(path, exist_ok=True)
-        os.makedirs(imageDir, exist_ok=True)
-        os.makedirs(labelDir, exist_ok=True)
 
-    def save_image(self, imageAndName):
-        data, name = imageAndName["data"], imageAndName["name"]
-        path = os.path.join(self.config["directory"], "images", "images.bin")
+    def save_image(self, data: AcquiredImage):
+        path = os.path.join(self.config["directory"], "images.bin")
         with open(path, "a+b") as f:
-            f.write(msgpack.packb({"name": name, "data": data}))
+            f.write(msgpack.packb({
+                "name": data.name,
+                "data": data.encoded_buffer,
+                "ts": data.time})
+            )
 
-    def save_labels(self, detectsAndName):
-        detects, name = detectsAndName
-        path = os.path.join(self.config["directory"], "labels", "labels.bin")
+    def save_labels(self, data: DetectionsInImage):
+        path = os.path.join(self.config["directory"], "labels.bin")
         _detects = []
-        for detect in detects:
+        for detect in data.objs:
             detect: dict = detect.__dict__.copy()
             detect.pop("mask")
             _detects.append(detect)
         with open(path, "a+b") as f:
-            f.write(msgpack.packb({"name": name, "labels": _detects}))
+            f.write(msgpack.packb({"name": data.image_id, "labels": _detects}))
 
-    def image_save_enabled_filter(self, x=None):
-        return self.config["enabled"] and self.config["save_image"]
+    def save_timeline_events(self, dp: TimelineDataPoint):
+        path = os.path.join(self.config["directory"], "events.bin")
+        with open(path, "a+b") as f:
+            f.write(msgpack.packb({"time": dp.time, "plot": dp.plot_name, "series": dp.series_name, "value": dp.value}))
 
-    def label_save_enabled_filter(self, x=None):
-        return self.config["enabled"] and self.config["save_labels"]
+    def config_enabled_filter(self, key):
+        def f(x=None):
+            return self.config["enabled"] and self.config[key]
+
+        return f
 
     def finalize(self):
         self._stop.on_next(True)

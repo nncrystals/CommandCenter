@@ -6,13 +6,13 @@ from datetime import datetime
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtCore
 from pyqtgraph import PlotDataItem
 
-from data_class.timeline_spec import DataPoint
+from data_class.subject_data import TimelineDataPoint
 from services import service_provider
 from services.subjects import Subjects
-
+from utils.QtScheduler import QtScheduler
 
 class TimeAxisItem(pg.AxisItem):
     def __init__(self, *args, **kwargs):
@@ -28,7 +28,7 @@ class TimelineWidget(pg.GraphicsLayoutWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.plot_height = 300
-        self.qt_scheduler = QtScheduler.QtScheduler(QtCore)
+        self.qt_scheduler = QtScheduler(QtCore)
 
         self.subjects: Subjects = service_provider.SubjectProvider().get_or_create_instance(None)
         """
@@ -47,7 +47,7 @@ class TimelineWidget(pg.GraphicsLayoutWidget):
         self.subjects.add_to_timeline \
             .subscribe(self.update_plot)
 
-    def update_plot(self, x: DataPoint):
+    def update_plot(self, x: TimelineDataPoint):
         if x.plot_name in self.plots:
             # existing plot
             plot_entry = self.plots[x.plot_name]
@@ -96,7 +96,7 @@ class TimelineWidget(pg.GraphicsLayoutWidget):
 
 if __name__ == '__main__':
     import rx
-    from rx import operators, scheduler
+    from rx import operators
     from utils import QtScheduler
     import traceback as tb
 
@@ -120,39 +120,39 @@ if __name__ == '__main__':
         sc = QtScheduler.QtScheduler(QtCore)
         rx.just(1).pipe(
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_1", "series_1").add_new_point(1.2))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_1", "series_1").add_new_point(1.2))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_1", "series_1").add_new_point(-1))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_1", "series_1").add_new_point(-1))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_2", "series_1").add_new_point(1.2))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_2", "series_1").add_new_point(1.2))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_2", "series_1").add_new_point(-12))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_2", "series_1").add_new_point(-12))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_1").add_new_point(1.2))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_1").add_new_point(1.2))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_1").add_new_point(-12))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_1").add_new_point(-12))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_1").add_new_point(1))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_2").add_new_point(3))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_1").add_new_point(1))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_2").add_new_point(3))),
             operators.delay(1.0, sc),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_1").add_new_point(-6))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_3", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_4", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_5", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_6", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_7", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_8", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_9", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_10", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_11", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_12", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_13", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_14", "series_2").add_new_point(-5))),
-            operators.map(lambda x: timeline_widget.update_plot(DataPoint("plot_15", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_1").add_new_point(-6))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_3", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_4", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_5", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_6", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_7", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_8", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_9", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_10", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_11", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_12", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_13", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_14", "series_2").add_new_point(-5))),
+            operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_15", "series_2").add_new_point(-5))),
         ).subscribe()
 
-tmr = QtCore.QTimer()
-tmr.timeout.connect(configure)
-tmr.setSingleShot(True)
-tmr.start(1)
-app.exec()
+    tmr = QtCore.QTimer()
+    tmr.timeout.connect(configure)
+    tmr.setSingleShot(True)
+    tmr.start(1)
+    app.exec()

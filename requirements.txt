@@ -1,3 +1,6 @@
+grpc
+genicam2
+harvesters
 rx
 certifi==2019.6.16
 chardet==3.0.4

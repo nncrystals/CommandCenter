@@ -48,6 +48,8 @@ class EllipsesDisplayWidget(PlotWidget):
     @QtCore.pyqtSlot(np.ndarray, np.ndarray)
     def updateHistograms(self, data):
         data = np.asarray(data)
+        if data.size == 0:
+            return
         major, minor = data[:,0], data[:,1]
         yMaj, xMaj = np.histogram(major, self.config["bins"])
         yMin, xMin = np.histogram(minor, self.config["bins"])

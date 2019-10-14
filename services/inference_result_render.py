@@ -1,12 +1,9 @@
 import math
 import random
-import cv2
 
+import cv2
 import numpy as np
 
-from data_class.detected_objects import DetectedObject
-from services.inference_comm import InferenceComm
-from inference_service_proto import inference_service_pb2_grpc as grpc_service
 from inference_service_proto import inference_service_pb2 as grpc_def
 
 

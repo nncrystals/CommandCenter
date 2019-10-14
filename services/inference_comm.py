@@ -1,18 +1,13 @@
-import glob
-import sys
 import time
-import typing
-import grpc
-import rx
 
+import grpc
+from pycocotools import mask as mask_util
 from rx import subject
-from rx import operators
 
 from data_class.detected_objects import DetectedObject
 from data_class.inference_stats import InferenceStats
-from inference_service_proto import inference_service_pb2_grpc as grpc_service
 from inference_service_proto import inference_service_pb2 as grpc_def
-from pycocotools import mask as mask_util
+from inference_service_proto import inference_service_pb2_grpc as grpc_service
 
 
 class InferenceComm(object):
@@ -20,6 +15,7 @@ class InferenceComm(object):
     result_chan = subject.Subject()
     error_chan = subject.Subject()
     stats_chan = subject.Subject()
+    back_pressure_chan = subject.BehaviorSubject(False)
 
     def __init__(self):
         super().__init__()
@@ -27,6 +23,7 @@ class InferenceComm(object):
         self.stub: grpc_service.InferenceStub
 
         self.start_time_queue = []
+        self.stub = None
 
     def on_connect_state_change(self, state: grpc.ChannelConnectivity):
         if state == grpc.ChannelConnectivity.READY:
@@ -47,22 +44,25 @@ class InferenceComm(object):
 
         self.stub = grpc_service.InferenceStub(self.channel)
 
-    def back_pressure_detection(self, value):
+    def back_pressure_detection(self):
         if len(self.start_time_queue) > 2:
-            return False
-        else:
+            self.back_pressure_chan.on_next(True)
             return True
+        else:
+            self.back_pressure_chan.on_next(False)
+            return False
 
     def inference_done(self, future: grpc.Future):
-        elapsedTime = time.time() - self.start_time_queue.pop(0)
+        elapsed_time = time.time() - self.start_time_queue.pop(0)
         try:
-            inferenceResult: grpc_def.InferenceResult = future.result(None)
-            numProcessedImages = len(inferenceResult.result)
-            stats = InferenceStats(numProcessedImages, elapsedTime)
+            self.back_pressure_detection()
+            inference_result: grpc_def.InferenceResult = future.result(None)
+            num_processed_images = len(inference_result.result)
+            stats = InferenceStats(num_processed_images, elapsed_time)
             self.stats_chan.on_next(stats)
 
             # notify new detections
-            self.result_chan.on_next(inferenceResult)
+            self.result_chan.on_next(inference_result)
         except Exception as ex:
             self.error_chan.on_next(f"Inference error: {ex}")
 
@@ -92,6 +92,7 @@ class InferenceComm(object):
         self.start_time_queue.append(time.time())
         resp: grpc.Future = self.stub.Inference.future(req)
         resp.add_done_callback(self.inference_done)
+        self.back_pressure_detection()
 
     @staticmethod
     def to_detected_object(detection: grpc_def.Detection):

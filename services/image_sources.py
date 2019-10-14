@@ -1,18 +1,20 @@
 import glob
-import glob
 import logging
+from datetime import datetime
 
 import numpy as np
 import rx
 from PIL import Image
 from genicam2.gentl import TimeoutException
 from numpy import random
-from rx import operators, disposable, scheduler
+from rx import operators, scheduler
 from rx import subject
 
 import services.service_provider
+from data_class.subject_data import AcquiredImage
 from services import config
 from services.subjects import Subjects
+from utils.observer import ErrorToConsoleObserver
 
 
 class ImageSource(object):
@@ -21,7 +23,6 @@ class ImageSource(object):
         super().__init__()
         self.subject_provider = services.service_provider.SubjectProvider()
         self.subjects: Subjects = self.subject_provider.get_or_create_instance(None)
-
 
     def start(self):
         self.subjects.image_source_connected.on_next(True)
@@ -32,12 +33,13 @@ class ImageSource(object):
     def is_running(self):
         pass
 
-    def next_image(self, arr):
-        self.subjects.image_producer.on_next(arr)
+    def next_image(self, img: AcquiredImage):
+        self.subjects.image_producer.on_next(img)
 
 
 class MockImageSource(ImageSource):
     config_prefix = "Test_Images"
+
     def __init__(self):
         super().__init__()
         self.config = config.SettingAccessor(self.config_prefix)
@@ -68,8 +70,9 @@ class MockImageSource(ImageSource):
         self.fps = self.config["fps"]
         rx.interval(1 / self.fps).pipe(
             operators.map(lambda x: self.generate_image()),
+            operators.map(lambda arr: AcquiredImage(arr, datetime.now().timestamp())),
             operators.take_until(self._stop),
-        ).subscribe(self.next_image)
+        ).subscribe(ErrorToConsoleObserver(self.next_image))
         self.running = True
 
     def is_running(self):
@@ -127,7 +130,7 @@ class HarvestersSource(ImageSource):
         except Exception as ex:
             self.logger.error(ex)
 
-    def reloadCameraDriver(self):
+    def reload_camera_driver(self):
         id_ = self.config["id"]
         if not id_:
             self.acquirer = self.driver.create_image_acquirer(list_index=0)
@@ -147,7 +150,7 @@ class HarvestersSource(ImageSource):
     def start(self):
         super().start()
 
-        self.reloadCameraDriver()
+        self.reload_camera_driver()
 
         if self.acquirer:
             self.acquirer.start_image_acquisition()

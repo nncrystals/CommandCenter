@@ -6,17 +6,20 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QDockWidget
 from rx import operators, disposable
 
+from data_class.distribution import EllipseDistribution
 from services import service_provider
 from services.analyzers import Analyzer
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
+from utils.observer import ErrorToConsoleObserver
 from widgets.ConsoleWidget import Console
 from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu
 from widgets.ConfigDialog import ConfigDialog
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from widgets.ImageDisplayWidget import SimpleDisplayWidget
+from widgets.TimelineWidget import TimelineWidget
 
 
 class MainWidget(QtWidgets.QMainWindow):
@@ -66,6 +69,7 @@ class MainWidget(QtWidgets.QMainWindow):
             "processed": QtWidgets.QDockWidget("Processed", self),
             "areaDist": QtWidgets.QDockWidget("Area distribution", self),
             "ellipseDist": QtWidgets.QDockWidget("Ellipse distribution", self),
+            "timeline": QtWidgets.QDockWidget("Timeline", self),
             "console": QtWidgets.QDockWidget("Console", self)
         }
 
@@ -78,6 +82,7 @@ class MainWidget(QtWidgets.QMainWindow):
         self.dockedPanels["processed"].setWidget(SimpleDisplayWidget(self))
         self.dockedPanels["areaDist"].setWidget(AreaDisplayWidget(self))
         self.dockedPanels["ellipseDist"].setWidget(EllipsesDisplayWidget(self))
+        self.dockedPanels["timeline"].setWidget(TimelineWidget(self))
         self.dockedPanels["console"].setWidget(Console(self))
 
         self.applyDefaultLayout()
@@ -90,27 +95,40 @@ class MainWidget(QtWidgets.QMainWindow):
         self.subscriptions.add(
             subjects.image_producer.pipe(
                 operators.observe_on(qt_scheduler),
-            ).subscribe(self.dockedPanels["input"].widget().updateImage)
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["input"].widget().updateImage))
         )
 
         # display processed images
         self.subscriptions.add(
-            subjects.sample_image_producer.pipe(
+            subjects.rendered_sample_image_producer.pipe(
                 operators.observe_on(qt_scheduler),
-            ).subscribe(self.dockedPanels["processed"].widget().updateImage)
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["processed"].widget().updateImage))
         )
 
         self.subscriptions.add(
-            subjects.parsed_result.pipe(
+            subjects.processed_distributions.pipe(
+                operators.pluck_attr("dists"),
                 operators.pluck("areas"),
+                operators.pluck_attr("area_dist"),
                 operators.observe_on(qt_scheduler),
-            ).subscribe(self.dockedPanels["areaDist"].widget().updateHistogram)
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["areaDist"].widget().updateHistogram))
         )
+
+        def join(x: EllipseDistribution):
+            return x.major_dist, x.minor_dist
+
         self.subscriptions.add(
-            subjects.parsed_result.pipe(
+            subjects.processed_distributions.pipe(
+                operators.pluck_attr("dists"),
                 operators.pluck("ellipses"),
+                operators.map(join),
                 operators.observe_on(qt_scheduler),
-            ).subscribe(self.dockedPanels["ellipseDist"].widget().updateHistograms)
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["ellipseDist"].widget().updateHistograms))
+        )
+
+        self.subscriptions.add(
+            subjects.add_to_timeline.pipe(operators.observe_on(qt_scheduler)).subscribe(
+                ErrorToConsoleObserver(self.dockedPanels["timeline"].widget().update_plot))
         )
 
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:

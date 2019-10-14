@@ -1,6 +1,7 @@
 import typing as T
 
 from services import subjects, image_sources, analyzers
+from services.image_encoder import ImageEncoder, JPEGEncoder
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
 from services.simex_io import SimexIO
@@ -122,6 +123,7 @@ class AnalyzerProvider(ServiceProvider):
     interface_typing = analyzers.Analyzer
     name_mapping = {
         "remote": analyzers.RemoteAnalyzer,
+        "test": analyzers.TestAnalyzer,
     }
     _instance: analyzers.Analyzer
 
@@ -155,6 +157,7 @@ class ResultSaverProvider(ServiceProvider):
     def _unload_service(self):
         self._instance.finalize()
 
+
 class SimexIOProvider(ServiceProvider):
     interface_typing = SimexIO
     default_type = SimexIO
@@ -162,3 +165,12 @@ class SimexIOProvider(ServiceProvider):
         "default": SimexIO
     }
     _instance: SimexIO
+
+
+class ImageEncoderProvider(ServiceProvider):
+    interface_typing = ImageEncoder
+    default_type = JPEGEncoder
+    name_mapping = {
+        "default": JPEGEncoder
+    }
+    _instance: ImageEncoder

@@ -1,13 +1,15 @@
+import datetime
 import io
 import sys
 import time
+from typing import Union
+
 import numpy as np
-from typing import Optional, Any
-
-from PIL import Image
-
-from PyQt5 import QtWidgets, QtCore, QtGui, QtNetwork
 import pyqtgraph as pg
+from PIL import Image
+from PyQt5 import QtWidgets, QtCore
+
+from data_class.subject_data import AcquiredImage
 
 
 class SimpleDisplayWidget(QtWidgets.QWidget):
@@ -15,16 +17,23 @@ class SimpleDisplayWidget(QtWidgets.QWidget):
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
-        self.imageItem = pg.ImageItem()
-        self.imageItem.setOpts(axisOrder='row-major')
-        self.imageWidget = pg.GraphicsView()
+        self.image_item = pg.ImageItem()
+        self.image_item.setOpts(axisOrder='row-major')
+        self.text_item = pg.TextItem(color=(255,0,0))
+        self.image_widget = pg.GraphicsView()
         self.view = pg.ViewBox(lockAspect=True, invertY=True)
-        self.imageWidget.setCentralItem(self.view)
-        self.view.addItem(self.imageItem)
-        layout.addWidget(self.imageWidget)
+        self.image_widget.setCentralItem(self.view)
+        self.view.addItem(self.image_item)
+        self.view.addItem(self.text_item)
+        layout.addWidget(self.image_widget)
 
-    def updateImage(self, image: np.ndarray):
-        self.imageItem.setImage(image, False)
+    def updateImage(self, image: Union[AcquiredImage, np.ndarray]):
+        if isinstance(image, AcquiredImage):
+            self.image_item.setImage(image.image, False)
+            self.text_item.setText(f"{datetime.datetime.fromtimestamp(image.time).strftime('%x %X')}")
+        else:
+            self.image_item.setImage(image, False)
+            # self.text_item.setText("")
 
 
 class ImageDisplayWidget(QtWidgets.QWidget):
@@ -39,8 +48,8 @@ class ImageDisplayWidget(QtWidgets.QWidget):
         self.imageWidget.ui.roiBtn.hide()
         layout.addWidget(self.imageWidget)
 
-    def updateImage(self, image: np.ndarray):
-        self.imageItem.setImage(image)
+    def updateImage(self, image: AcquiredImage):
+        self.imageItem.setImage(image.image, False)
 
 
 if __name__ == '__main__':

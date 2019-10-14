@@ -6,10 +6,12 @@ import numpy as np
 import rx
 import simex
 from rx import operators, subject, scheduler
+from rx.disposable import Disposable
 
 from services import config
 import services.service_provider
 from services.subjects import Subjects
+from utils.observer import ErrorToConsoleObserver
 
 
 class OutputPorts(enum.Enum):
@@ -56,11 +58,13 @@ class SimexIO(object):
                 self.logger.error(f"Failed to connect to SimexIO. Exception: {ex}")
                 return
 
-            self.instance.verify_compatibility() \
-                .pipe(operators.flat_map(self._simex_verify_version_cb)) \
-                .pipe(operators.map(self._simex_enforce_port_configuration_cb)) \
-                .pipe(operators.map(self._simex_configure_subscription)) \
-                .subscribe(observer)
+            self.instance.verify_compatibility().pipe(
+                operators.flat_map(self._simex_verify_version_cb),
+                operators.map(self._simex_enforce_port_configuration_cb),
+                operators.map(self._simex_configure_subscription),
+            ).subscribe(observer)
+
+            return Disposable(lambda: None)
 
         return rx.create(subscribe)
 
@@ -78,7 +82,7 @@ class SimexIO(object):
             self.logger.error(f"Failed to disconnect SimexIO. Exception: {ex}")
 
     def _simex_verify_version_cb(self, x=None):
-        if x == False:
+        if not x:
             raise RuntimeError("Simex server compatibility verification failed")
         else:
             # verify port configuration
@@ -97,25 +101,28 @@ class SimexIO(object):
         self.logger.error(f"Exception occured in SimexIO validation chain: {err}")
 
     def _simex_configure_subscription(self, x=None):
-        self.subjects.image_producer \
-            .pipe(operators.observe_on(self.execution_thread)) \
-            .pipe(operators.map(lambda im: np.median(im))) \
-            .pipe(operators.buffer_with_count(self.config["buffer_count"])) \
-            .pipe(operators.map(lambda medians: np.mean(medians))) \
-            .pipe(operators.take_until(self._stop)) \
-            .subscribe(
+        self.subjects.image_producer.pipe(
+            operators.observe_on(self.execution_thread),
+            operators.map(lambda acquired_image: acquired_image.image),  # pluck the image array
+            operators.map(lambda im: np.median(im)),
+            operators.buffer_with_count(self.config["buffer_count"]),
+            operators.map(lambda medians: np.mean(medians)),
+            operators.take_until(self._stop)
+        ).subscribe(
+            ErrorToConsoleObserver(
                 lambda t: self.instance.request_port_update(
                     OutputPorts.BRIGHTNESS.value,
-                    np.asarray(t, dtype=np.float64)).subscribe()
-            )
+                    np.asarray(t, dtype=np.float64)
+                ).subscribe(ErrorToConsoleObserver()))
+        )
 
 
 if __name__ == '__main__':
     def update(x=None):
         print("update!")
-        simio.instance.request_port_update(0, np.array([133], dtype=np.float64)).subscribe()
+        simio.instance.request_port_update(0, np.array([133], dtype=np.float64)).subscribe(ErrorToConsoleObserver())
 
 
     simio = SimexIO()
-    simio.connect().subscribe(update)
+    simio.connect().subscribe(ErrorToConsoleObserver(update))
     time.sleep(1)
