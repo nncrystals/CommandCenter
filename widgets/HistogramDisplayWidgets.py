@@ -1,8 +1,11 @@
+from typing import List
+
 import numpy as np
 import pyqtgraph as pg
 from PyQt5 import QtCore
 
-import services.config as configProvider
+import services.config as config_provider
+from data_class.distribution import EllipseDistribution, AreaDistribution
 
 
 class PlotWidget(pg.PlotWidget):
@@ -10,49 +13,75 @@ class PlotWidget(pg.PlotWidget):
         super().__init__(parent, **kwargs)
 
 
-class AreaDisplayWidget(PlotWidget):
-    configPrefix = "Area_Distribution"
+class HistogramSeriesConfiguration(object):
+    def __init__(self, name: str, brush=(0, 0, 255, 150)):
+        self.name = name
+        self.brush = brush
+
+
+class HistogramWidget(PlotWidget):
+    def __init__(self, confs: List[HistogramSeriesConfiguration], **kwargs):
+        super().__init__(**kwargs)
+        self.plots = {}
+        self.plotItem.setLabel("left", "Counts")
+        self.plotItem.addLegend()
+
+        for conf in confs:
+            self.plots[conf.name] = self.plotItem.plot(brush=conf.brush, stepMode=True, fillLevel=0, name=conf.name)
+
+
+class AreaDisplayWidget(HistogramWidget):
+    config_prefix = "Area_Distribution"
 
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.config = configProvider.SettingAccessor(AreaDisplayWidget.configPrefix)
+        super().__init__([HistogramSeriesConfiguration("area", (0, 0, 255, 150))], parent=parent)
+
+        self.config = config_provider.SettingAccessor(self.config_prefix)
 
     @staticmethod
-    @configProvider.DefaultSettingRegistration(configPrefix)
-    def defaultSettings(configPrefix):
-        configProvider.default_settings(configPrefix, [
-            configProvider.SettingRegistry("bins", 30, type="int", title="Bins")
+    @config_provider.DefaultSettingRegistration(config_prefix)
+    def default_settings(config_prefix):
+        config_provider.default_settings(config_prefix, [
+            config_provider.SettingRegistry("bins", 30, type="int", title="Bins")
         ])
 
-    @QtCore.pyqtSlot(np.ndarray)
-    def updateHistogram(self, arr: list):
-        y, x = np.histogram(arr, self.config["bins"])
-        self.plotItem.clear()
-        self.plotItem.plot(x, y, stepMode=True, fillLevel=0, brush=(0, 0, 255, 150))
-
-
-class EllipsesDisplayWidget(PlotWidget):
-    configPrefix = "Ellipse_Distribution"
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.config = configProvider.SettingAccessor(EllipsesDisplayWidget.configPrefix)
-
-    @staticmethod
-    @configProvider.DefaultSettingRegistration(configPrefix)
-    def defaultSettings(configPrefix):
-        configProvider.default_settings(configPrefix, [
-            configProvider.SettingRegistry("bins", 30, type="int", title="Bins")
-        ])
-
-    @QtCore.pyqtSlot(np.ndarray, np.ndarray)
-    def updateHistograms(self, data):
-        data = np.asarray(data)
-        if data.size == 0:
+    def update_histogram(self, dist: AreaDistribution):
+        if dist.area_dist.size == 0:
             return
-        major, minor = data[:,0], data[:,1]
-        yMaj, xMaj = np.histogram(major, self.config["bins"])
-        yMin, xMin = np.histogram(minor, self.config["bins"])
-        self.plotItem.clear()
-        self.plotItem.plot(xMaj, yMaj, stepMode=True, fillLevel=0, brush=(0, 0, 255, 150))
-        self.plotItem.plot(xMin, yMin, stepMode=True, fillLevel=0, brush=(255, 0, 0, 150))
+        y, x = np.histogram(dist.area_dist, self.config["bins"])
+        self.plots["area"].setData(x, y)
+        label = f"Area distribution {dist.unit}"
+        if self.plotItem.getLabel('bottom') != label:
+            self.plotItem.setLabel('bottom', label)
+
+
+class EllipsesDisplayWidget(HistogramWidget):
+    config_prefix = "Ellipse_Distribution"
+
+    def __init__(self, parent=None):
+        super().__init__([
+            HistogramSeriesConfiguration("minor axis", (0, 0, 255, 150)),
+            HistogramSeriesConfiguration("major axis", (255, 0, 0, 150)),
+        ], parent=parent)
+        self.config = config_provider.SettingAccessor(self.config_prefix)
+
+    @staticmethod
+    @config_provider.DefaultSettingRegistration(config_prefix)
+    def default_settings(config_prefix):
+        config_provider.default_settings(config_prefix, [
+            config_provider.SettingRegistry("bins", 30, type="int", title="Bins")
+        ])
+
+    def update_histogram(self, dist: EllipseDistribution):
+        if dist.major_dist.size == 0:
+            return
+        major, minor = dist.major_dist, dist.minor_dist
+        y_maj, x_maj = np.histogram(major, self.config["bins"])
+        y_min, x_min = np.histogram(minor, self.config["bins"])
+
+        self.plots["major axis"].setData(x_maj, y_maj)
+        self.plots["minor axis"].setData(x_min, y_min)
+
+        label = f"Ellipses distribution {dist.unit}"
+        if self.plotItem.getLabel('bottom') != label:
+            self.plotItem.setLabel('bottom', label)

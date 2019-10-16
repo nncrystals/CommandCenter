@@ -22,6 +22,8 @@ class Subjects(object):
     analyzer_back_pressure_detected: subject.BehaviorSubject = subject.BehaviorSubject(False)
     rendered_sample_image_producer: typing.Subject[np.ndarray, np.ndarray] = subject.Subject()
 
+    analyzer_connected: subject.BehaviorSubject = subject.BehaviorSubject(False)
+
     processed_distributions: typing.Subject[ProcessedDistributions, ProcessedDistributions] = subject.Subject()
     add_to_timeline: typing.Subject[TimelineDataPoint, TimelineDataPoint] = subject.Subject()
 

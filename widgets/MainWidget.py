@@ -6,19 +6,15 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtWidgets import QDockWidget
 from rx import operators, disposable
 
-from data_class.distribution import EllipseDistribution
 from services import service_provider
-from services.analyzers import Analyzer
-from services.result_processor import ResultProcessor
-from services.result_saver import ResultSaver
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
 from utils.observer import ErrorToConsoleObserver
-from widgets.ConsoleWidget import Console
-from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu
 from widgets.ConfigDialog import ConfigDialog
+from widgets.ConsoleWidget import Console
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from widgets.ImageDisplayWidget import SimpleDisplayWidget
+from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu
 from widgets.TimelineWidget import TimelineWidget
 
 
@@ -109,21 +105,16 @@ class MainWidget(QtWidgets.QMainWindow):
             subjects.processed_distributions.pipe(
                 operators.pluck_attr("dists"),
                 operators.pluck("areas"),
-                operators.pluck_attr("area_dist"),
                 operators.observe_on(qt_scheduler),
-            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["areaDist"].widget().updateHistogram))
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["areaDist"].widget().update_histogram))
         )
-
-        def join(x: EllipseDistribution):
-            return x.major_dist, x.minor_dist
 
         self.subscriptions.add(
             subjects.processed_distributions.pipe(
                 operators.pluck_attr("dists"),
                 operators.pluck("ellipses"),
-                operators.map(join),
                 operators.observe_on(qt_scheduler),
-            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["ellipseDist"].widget().updateHistograms))
+            ).subscribe(ErrorToConsoleObserver(self.dockedPanels["ellipseDist"].widget().update_histogram))
         )
 
         self.subscriptions.add(

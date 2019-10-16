@@ -6,6 +6,7 @@ import numpy as np
 from rx import operators
 from rx import scheduler
 from rx import subject
+from rxpy_backpressure import BackPressure
 
 import inference_service_proto.inference_service_pb2 as grpc_def
 import services.service_provider
@@ -14,22 +15,24 @@ from data_class.subject_data import AcquiredImage, DetectionsInImage, SampleImag
 from services import config
 from services.inference_comm import InferenceComm
 from services.subjects import Subjects
+from utils.backpressure import bp_drop_report_full, bp_operator
 from utils.observer import ErrorToConsoleObserver
 
 
 class Analyzer(object):
     def __init__(self, *args, **kwargs):
         super().__init__()
+        self.logger = logging.getLogger("console")
         self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
 
     def is_running(self):
-        pass
+        return self.subjects.analyzer_connected.value
 
     def start(self):
-        pass
+        self.subjects.analyzer_connected.on_next(True)
 
     def stop(self):
-        pass
+        self.subjects.analyzer_connected.on_next(False)
 
     def update_back_pressure_status(self, is_back_pressure: bool):
         self.subjects.analyzer_back_pressure_detected.on_next(is_back_pressure)
@@ -40,6 +43,10 @@ class Analyzer(object):
     def produce_sample_image_data(self, data: SampleImageData):
         self.subjects.sample_image_data.on_next(data)
 
+    def back_pressure_barrier(self, x):
+        value = self.subjects.analyzer_back_pressure_detected.value
+        return not value
+
 
 class RemoteAnalyzer(Analyzer):
     config_prefix = "Remote_Analyzer"
@@ -48,7 +55,6 @@ class RemoteAnalyzer(Analyzer):
         super().__init__()
 
         self.config = config.SettingAccessor(self.config_prefix)
-        self.logger = logging.getLogger("console")
         self.batch_size = self.config["batch_size"]
         self.inference_comm = InferenceComm()
         self._stop = subject.Subject()
@@ -59,8 +65,8 @@ class RemoteAnalyzer(Analyzer):
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
-    def defaultSettings(configPrefix):
-        config.default_settings(configPrefix, [
+    def default_settings(config_prefix):
+        config.default_settings(config_prefix, [
             config.SettingRegistry("ip", "127.0.0.1"),
             config.SettingRegistry("port", "3034"),
             config.SettingRegistry("batch_size", 5, type="int", title="Inference batch size"),
@@ -70,8 +76,8 @@ class RemoteAnalyzer(Analyzer):
         if connected:
             self.subjects.image_producer.pipe(
                 operators.observe_on(self.feed_scheduler),
-                operators.filter(lambda x: not self.subjects.analyzer_back_pressure_detected.value),
                 operators.buffer_with_count(self.batch_size),
+                bp_operator(BackPressure.DROP, 5),
                 operators.take_until(self._stop),
             ).subscribe(ErrorToConsoleObserver(self.feed_image))
 
@@ -83,11 +89,11 @@ class RemoteAnalyzer(Analyzer):
             # report error when image source is still producing when back pressuring
             self.subjects.analyzer_back_pressure_detected.pipe(
                 operators.combine_latest(self.subjects.image_producer),
-                operators.map(lambda x: x[0]),
-                operators.throttle_with_timeout(1.0),
+                operators.filter(lambda x: x[0]),
+                operators.throttle_first(1.0),
                 operators.take_until(self._stop),
             ).subscribe(ErrorToConsoleObserver(
-                lambda x: print("Image is feeding while back-pressure is detected. Please slow down the FPS")))
+                lambda x: self.logger.warning("Image is feeding while back-pressure is detected. Please slow down the FPS")))
 
             self.inference_comm.result_chan.pipe(
                 operators.subscribe_on(self.process_scheduler),
@@ -116,6 +122,7 @@ class RemoteAnalyzer(Analyzer):
         self.inference_comm.connection_chan.pipe(operators.take_until(self._stop)).subscribe(
             ErrorToConsoleObserver(self.configure_subscriptions))
         self.inference_comm.connect_to_grpc_server(self.config["ip"], self.config["port"])
+        super(RemoteAnalyzer, self).start()
 
     def clean(self):
         self.inference_comm.stop()
@@ -125,6 +132,7 @@ class RemoteAnalyzer(Analyzer):
         self._stop.on_next(True)
         self._stop.on_completed()
         super().stop()
+        super(RemoteAnalyzer, self).stop()
 
     def feed_image(self, acquired_images: typing.Iterable[AcquiredImage]):
         try:
@@ -165,41 +173,40 @@ class RemoteAnalyzer(Analyzer):
 class TestAnalyzer(Analyzer):
     def __init__(self):
         super().__init__()
-        self.queue_length = 0
-        self.running = False
         self._stop = subject.Subject()
-
-    def is_running(self):
-        return self.running
+        self.scheduler = scheduler.ThreadPoolScheduler()
 
     def start(self):
-        self.running = True
-
-        def increment(x):
-            self.queue_length += 1
-            if self.queue_length > 2:
-                self.update_back_pressure_status(True)
+        # report more image when back pressure
+        self.subjects.image_producer.pipe(
+            operators.observe_on(self.scheduler),
+            operators.combine_latest(self.subjects.analyzer_back_pressure_detected),
+            operators.filter(lambda x: x[1]),  # only operate when back pressure
+            operators.buffer_with_time(1.0),  # in 1 sec
+            operators.filter(lambda x: len(x) > 3),  # more than 3 emission
+            operators.throttle_first(3.0),  # report every 3 seconds
+            operators.take_until(self._stop),
+        ).subscribe(self.report_back_pressure_emission)
 
         self.subjects.image_producer.pipe(
-            operators.filter(lambda x: not self.subjects.analyzer_back_pressure_detected.value),
+            operators.observe_on(self.scheduler),  # prevent blocking the upstream subject
+            operators.filter(self.back_pressure_barrier),
             operators.buffer_with_count(5),
-            operators.do_action(increment),
-            operators.delay(1.0),
-            operators.take_until(self._stop)
+            bp_drop_report_full(self.subjects.analyzer_back_pressure_detected, 3, 1),
+            operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.produce_fake_analyze_data))
+        super(TestAnalyzer, self).start()
 
     def stop(self):
-        self.running = False
-        self._stop.on_next(9)
+        self._stop.on_next(0)
+        super(TestAnalyzer, self).stop()
 
     def produce_fake_analyze_data(self, x: typing.List[AcquiredImage]):
         from pycocotools import mask as mask_util
-
-        self.queue_length -= 1
-        self.update_back_pressure_status(False)
+        time.sleep(1)  # simulate processing time
         fake_obj = DetectedObject()
         canvas = np.zeros((600, 800), dtype=np.uint8)
-        canvas[10:30, 10:30] = True
+        canvas[10:300, 10:300] = True
         rle = mask_util.encode(np.asfortranarray(canvas))
         fake_obj.maskRLE = rle
         fake_obj.mask = canvas
@@ -217,3 +224,6 @@ class TestAnalyzer(Analyzer):
 
         for data in x:
             self.produce_detected_results(DetectionsInImage(data.name, objs))
+
+    def report_back_pressure_emission(self, x):
+        self.logger.warning("Analyzer cannot follow up the image source. Try reducing the FPS.")

@@ -39,6 +39,7 @@ class ResultProcessor(object):
     def default_settings(configPrefix):
         config.default_settings(configPrefix, [
             config.SettingRegistry("group_size", 10, type="int", title="Group size (images)"),
+            config.SettingRegistry("calibration_ratio", 0, type="float", title="Length (micrometer) per pixel"),
             config.SettingRegistry("crop_threshold", 0, type="int",
                                    title="Edge cropping object threshold (pixels)")
         ])
@@ -95,8 +96,19 @@ class ResultProcessor(object):
                     ellipse = cv2.fitEllipse(biggest_contour)
                     majors.append(ellipse[1][0])
                     minors.append(ellipse[1][1])
-        area_dist = AreaDistribution(areas)
-        ellipse_dist = EllipseDistribution(majors, minors)
+        areas = np.asarray(areas).T
+        minors = np.asarray(minors).T
+        majors = np.asarray(majors).T
+
+        calibration_ratio = self.config["calibration_ratio"]
+        if calibration_ratio == 0:
+            area_dist = AreaDistribution(areas)
+            ellipse_dist = EllipseDistribution(majors, minors)
+        else:
+            area_dist = AreaDistribution(areas * calibration_ratio, "<math>&mu;m<sup>2</sup></math>")
+            ellipse_dist = EllipseDistribution(majors * calibration_ratio, minors * calibration_ratio,
+                                               "<math>&mu;m</math>")
+
         self.subjects.processed_distributions.on_next(
             ProcessedDistributions({"areas": area_dist, "ellipses": ellipse_dist}))
         self.subjects.add_to_timeline.on_next(

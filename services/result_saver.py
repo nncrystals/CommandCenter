@@ -1,7 +1,7 @@
 import os
 
 import msgpack
-from rx import operators, subject
+from rx import operators, subject, scheduler
 
 from data_class.subject_data import TimelineDataPoint, DetectionsInImage, AcquiredImage
 from services import config
@@ -19,15 +19,19 @@ class ResultSaver(object):
         self._stop = subject.Subject()
         self.config = config.SettingAccessor(self.config_prefix)
         self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
+        self.saving_scheduler = scheduler.NewThreadScheduler()
         self.subjects.image_producer.pipe(
+            operators.observe_on(self.saving_scheduler),
             operators.filter(self.config_enabled_filter("save_images")),
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.save_image))
         self.subjects.detection_result.pipe(
+            operators.observe_on(self.saving_scheduler),
             operators.filter(self.config_enabled_filter("save_labels")),
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.save_labels))
         self.subjects.add_to_timeline.pipe(
+            operators.observe_on(self.saving_scheduler),
             operators.filter(self.config_enabled_filter("save_events")),
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.save_timeline_events))

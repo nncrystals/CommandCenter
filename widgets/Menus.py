@@ -116,8 +116,9 @@ class ImageSourceMenu(QtWidgets.QMenu):
             text = action.text()
             try:
                 self.image_source_provider.replace_instance_with(text)
-            except:
+            except Exception as ex:
                 self.logger.error("Failed to switch image source. Try stop the current image source first")
+                self.logger.debug(ex)
                 return
             self.config["source"] = text
             self.logger.info(f"Image source is switched to {text}")

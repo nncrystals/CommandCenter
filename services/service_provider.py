@@ -98,6 +98,7 @@ class ImageSourceProvider(ServiceProvider):
     name_mapping = {
         "test": image_sources.MockImageSource,
         "harvesters": image_sources.HarvestersSource,
+        "files": image_sources.MediaFileSource,
     }
     _instance: image_sources.ImageSource
 

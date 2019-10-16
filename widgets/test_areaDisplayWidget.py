@@ -9,7 +9,7 @@ from widgets.HistogramDisplayWidgets import AreaDisplayWidget
 
 class TestAreaDisplayWidget(TestCase):
     def updateHistogram(self, widget):
-        widget.updateHistogram(np.random.standard_normal(500))
+        widget.update_histogram(np.random.standard_normal(500))
 
     def test_updateHistogram(self):
         app = QtWidgets.QApplication(sys.argv)

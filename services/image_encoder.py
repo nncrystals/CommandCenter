@@ -35,7 +35,8 @@ class JPEGEncoder(ImageEncoder):
 
     def encode(self, image: np.ndarray):
         if len(image.shape) == 2:
-            return self.encoder.encode(image[:, :, np.newaxis], quality=self.config["quality"], jpeg_subsample=tj.TJSAMP_GRAY)
+            return self.encoder.encode(image[:, :, np.newaxis], quality=self.config["quality"],
+                                       jpeg_subsample=tj.TJSAMP_GRAY, pixel_format=tj.TJPF_GRAY)
 
         else:
             raise NotImplementedError("Multi-channel image encoding is not supported.")

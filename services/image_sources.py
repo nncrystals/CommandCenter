@@ -1,23 +1,34 @@
 import glob
 import logging
+import os
 from datetime import datetime
+from threading import Condition
 
+import cv2
 import numpy as np
 import rx
 from PIL import Image
+from PyQt5 import QtCore, QtWidgets
 from genicam2.gentl import TimeoutException
+from harvesters.core import Buffer
 from numpy import random
-from rx import operators, scheduler
-from rx import subject
+from rx import operators, disposable, subject, scheduler
+from rx.scheduler import ThreadPoolScheduler
 
 import services.service_provider
 from data_class.subject_data import AcquiredImage
 from services import config
 from services.subjects import Subjects
+from utils.QtScheduler import QtScheduler
+from utils.backpressure import bp_operator
 from utils.observer import ErrorToConsoleObserver
+from rxpy_backpressure import BackPressure
 
 
 class ImageSource(object):
+    """
+    Image source should decide whether the downstream should backpressure/block itself by using observe_on or not
+    """
 
     def __init__(self):
         super().__init__()
@@ -31,7 +42,7 @@ class ImageSource(object):
         self.subjects.image_source_connected.on_next(False)
 
     def is_running(self):
-        pass
+        return self.subjects.image_source_connected.value
 
     def next_image(self, img: AcquiredImage):
         self.subjects.image_producer.on_next(img)
@@ -44,9 +55,10 @@ class MockImageSource(ImageSource):
         super().__init__()
         self.config = config.SettingAccessor(self.config_prefix)
         self.fps = self.config["fps"]
-        self.images = self._sourceImages()
+        self.images = self._source_images()
         self._stop = subject.Subject()
         self.running = False
+        self.feed_scheduler = ThreadPoolScheduler()
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
@@ -56,9 +68,14 @@ class MockImageSource(ImageSource):
         ])
 
     @staticmethod
-    def _sourceImages():
+    def _source_images():
         image_path = glob.glob("TestImages/*.png")
-        images = [(np.asarray(Image.open(image))[:, :, 1]) for image in image_path]
+
+        images = []
+        for image in image_path:
+            image_array = cv2.imread(image, 0)
+            images.append(image_array)
+
         return images
 
     def generate_image(self):
@@ -74,6 +91,7 @@ class MockImageSource(ImageSource):
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.next_image))
         self.running = True
+        super().start()
 
     def is_running(self):
         return self.running
@@ -81,9 +99,13 @@ class MockImageSource(ImageSource):
     def stop(self):
         self._stop.on_next(None)
         self.running = False
+        super().stop()
 
 
 class HarvestersSource(ImageSource):
+    """
+    This source disregard analyzer back pressure. User has to control the frame rate.
+    """
     config_prefix = "Harvesters_Source"
 
     def __init__(self):
@@ -117,13 +139,14 @@ class HarvestersSource(ImageSource):
 
     def _read_buffer(self):
         try:
-            buffer = self.acquirer.fetch_buffer(timeout=0.1)
+            buffer: Buffer = self.acquirer.fetch_buffer(timeout=0.1)
             payload = buffer.payload
             component = payload.components[0]
             width = component.width
             height = component.height
             content = component.data.reshape(height, width)
-            self.next_image(content.copy())
+            time = buffer.timestamp_ns
+            self.next_image(AcquiredImage(content.copy(), time / 1e9, f"{time}.jpg"))
             buffer.queue()
         except TimeoutException as ex:
             pass
@@ -164,3 +187,119 @@ class HarvestersSource(ImageSource):
         self._stop.on_next(True)
         self.running = False
         super().stop()
+
+
+class MediaFileSource(ImageSource):
+    """
+    Supply image from files.
+    This source is back-pressure-pausale
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._stop = subject.Subject()
+        self.logger = logging.getLogger("console")
+        self.back_pressure_lock = Condition()
+
+    def start(self):
+        if not self.subjects.analyzer_connected.value:
+            if not self.analyzer_not_connected_prompt():
+                return
+
+        qt_scheduler = QtScheduler(QtCore)
+
+        # this sequence is auto-back-pressured
+        observable = self.request_media_file(qt_scheduler).pipe(
+            # list of files
+            operators.observe_on(scheduler.NewThreadScheduler()),
+            # The following sequence will be run on a new thread.
+            operators.flat_map(rx.from_list),
+            # observable of files.
+            self.load_file_operator(),  # When back pressure, this one will block.
+            # observable of frames (AcquiredImage). This operation will be blocked if the downstream is blocked.
+            operators.take_until(self._stop),
+        ).subscribe(ErrorToConsoleObserver(on_next=self.next_image, on_error=self._catch))
+
+        self.subjects.analyzer_back_pressure_detected.pipe(
+            operators.take_until(self._stop),
+        ).subscribe(self.notify_back_pressure_changed)
+        super().start()
+
+    def stop(self):
+        self._stop.on_next(0)
+        super().stop()
+
+    def analyzer_not_connected_prompt(self):
+        ret = QtWidgets.QMessageBox.question(
+            None,
+            "Analyzer not running",
+            "The analyzer is not running. Some frames may not be processed. Do you want to proceed?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        )
+        if ret == QtWidgets.QMessageBox.Yes:
+            return True
+        else:
+            return False
+
+    def request_media_file(self, sch) -> rx.Observable:
+        def subscribe(observer, subscriber_scheduler: rx.typing.Scheduler = None):
+            def _subscribe(*args):
+                files = QtWidgets.QFileDialog.getOpenFileNames(None, "Select media file(s)")
+                observer.on_next(files[0])
+                observer.on_completed()
+
+            sch.schedule(_subscribe)
+            return disposable.Disposable(lambda: None)
+
+        return rx.create(subscribe)
+
+    def _catch(self, ex):
+        self.logger.error(ex)
+        self.logger.info("Error occured. Stopping image source.")
+        self.stop()
+
+    def load_file_operator(self):
+        def upstream(source):
+            def subscribe(observer, sche=None):
+                def _subscribe(next_path):
+                    # back pressure blocking
+                    with self.back_pressure_lock:
+                        self.back_pressure_lock.wait_for(
+                            lambda: not self.subjects.analyzer_back_pressure_detected.value)
+                    _, ext = os.path.splitext(next_path)
+                    if ext in (".png", ".jpeg", ".jpg", ".bmp", ".tiff", ".tif"):
+                        # is a image file
+                        frame = cv2.imread(next_path, cv2.cv2.IMREAD_GRAYSCALE)
+                        name = os.path.basename(next_path)
+                        t = os.path.getctime(next_path)
+
+                        observer.on_next(AcquiredImage(frame, name=name, time=t))
+                    elif ext in (".mov", ".mp4", ".avi"):
+                        # is a video file
+                        cap = cv2.VideoCapture(next_path)
+                        try:
+                            stop = False
+                            if not cap.isOpened():
+                                raise RuntimeError(f"Failed to load video file: {next_path}")
+
+                            while True:
+                                if stop:
+                                    raise InterruptedError(f"Interrupt processing {next_path}.")
+                                ret, frame = cap.read()
+                                if frame is None:
+                                    observer.on_completed()
+                                    break
+                                observer.on_next(frame)
+                        finally:
+                            cap.release()
+
+                return source.subscribe(_subscribe, sche)
+
+            return rx.create(subscribe)
+
+        return upstream
+
+    def notify_back_pressure_changed(self, x):
+        if not x:
+            with self.back_pressure_lock:
+                self.back_pressure_lock.notify_all()

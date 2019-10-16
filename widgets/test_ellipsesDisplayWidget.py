@@ -9,7 +9,7 @@ from widgets.HistogramDisplayWidgets import EllipsesDisplayWidget
 
 class TestEllipsesDisplayWidget(TestCase):
     def updateHistogram(self, widget):
-        widget.updateHistograms(np.random.standard_normal(500), np.random.standard_normal(500) * 15 + 10)
+        widget.update_histogram(np.random.standard_normal(500), np.random.standard_normal(500) * 15 + 10)
 
     def test_ellipseDisplayWidget(self):
         app = QtWidgets.QApplication(sys.argv)
