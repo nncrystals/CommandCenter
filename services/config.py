@@ -1,8 +1,10 @@
 import os
 import typing
 from pydoc import locate
+
 from rx import subject
-from PyQt5 import QtWidgets, QtGui, QtCore
+
+from PySide2 import QtCore
 
 setting_updated_channel = subject.Subject()
 
@@ -20,9 +22,18 @@ class SettingAccessor(object):
         self.section = f"{section}/" if section else ""
 
     def __getitem__(self, item):
-        type = global_settings.value(f"{self.section}{item}/type", defaultValue="str")
-        return global_settings.value(f"{self.section}{item}", type=locate(type))
+        item = self.section + item
+        t = global_settings.value(f"{item}/type", defaultValue="str")
+        default = global_settings.value(f"{item}/default", defaultValue=None)
 
+        # https://bugreports.qt.io/browse/PYSIDE-820
+        if t == "bool":
+            value = global_settings.value(item, defaultValue=default)
+            value = bool(value)
+        else:
+            value = global_settings.value(item, defaultValue=default, type=locate(t))
+
+        return value
     def __setitem__(self, key, value):
         k = f"{self.section}{key}"
         global_settings.setValue(k, value)

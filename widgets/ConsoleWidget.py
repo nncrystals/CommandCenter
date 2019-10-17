@@ -1,7 +1,9 @@
 import datetime
 import logging
 import pyqtgraph.console as pgc
-from PyQt5 import QtWidgets, QtCore
+from PySide2 import QtWidgets, QtCore
+from rx import operators
+from utils.QtScheduler import QtScheduler
 
 from utils.QtInterceptHandler import QtInterceptHandler
 
@@ -13,7 +15,7 @@ class Console(pgc.ConsoleWidget):
         self.handler = QtInterceptHandler()
         self.interceptLogger = logging.getLogger("console")
 
-        self.handler.loggingRequested.connect(self.printLog)
+        self.handler.loggingRequested.pipe(operators.observe_on(QtScheduler(QtCore))).subscribe(self.printLog)
         self.interceptLogger.setLevel(logging.DEBUG)
         self.interceptLogger.handlers.clear()
         self.interceptLogger.addHandler(self.handler)
@@ -31,7 +33,8 @@ class Console(pgc.ConsoleWidget):
         self.output.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.output.customContextMenuRequested.connect(self.openMenu)
 
-    def printLog(self, level, message):
+    def printLog(self, x):
+        level, message = x
         levelText = logging.getLevelName(level)
         timestamp = datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
         if level <= logging.INFO:

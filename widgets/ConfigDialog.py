@@ -1,14 +1,10 @@
-import os
 import sys
-import json
 from pydoc import locate
 
 import pyqtgraph.parametertree as pgp
-from PyQt5 import QtWidgets, QtGui, QtCore
+from Qt import QtWidgets, QtGui, QtCore
 
 from services import config
-
-
 # parse the config file
 from services.config import SettingAccessor
 
@@ -46,7 +42,12 @@ class ConfigDialog(QtWidgets.QDialog):
                 t = self.config.value(f"{key}/type", "str")
                 title = self.config.value(f"{key}/title", key)
                 default = self.config.value(f"{key}/default", None)
-                value = self.config.value(key, defaultValue=default, type=locate(t))
+
+                # https://bugreports.qt.io/browse/PYSIDE-820
+                if t == "bool":
+                    value = bool(self.config.value(key, defaultValue=default))
+                else:
+                    value = self.config.value(key, defaultValue=default, type=locate(t))
 
                 def valueChanged(obj: pgp.Parameter, newVal):
                     accessor = SettingAccessor()

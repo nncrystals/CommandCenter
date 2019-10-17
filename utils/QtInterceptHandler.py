@@ -1,17 +1,17 @@
-from PyQt5 import QtCore
-from logging import StreamHandler
 import logging
+from rx.subject import Subject
+from logging import StreamHandler
 
 
-class QtInterceptHandler(QtCore.QObject, StreamHandler):
+class QtInterceptHandler(StreamHandler):
     # (LOGGING.level, message)
-    loggingRequested = QtCore.pyqtSignal(int, str)
+    loggingRequested = Subject()
 
     def __init__(self):
-        super().__init__()
+        super(QtInterceptHandler, self).__init__()
 
-    def emit(self, record):
+    def emit(self, record, **kwargs):
         level = record.levelno
         message = record.getMessage()
-        self.loggingRequested.emit(level, message)
+        self.loggingRequested.on_next((level, message))
         super().emit(record)

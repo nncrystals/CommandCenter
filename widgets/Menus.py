@@ -3,14 +3,16 @@ import logging
 import os
 import traceback
 
-from PyQt5 import QtWidgets, QtCore
+from PySide2 import QtWidgets, QtCore
 from setuptools import glob
 from services import config
 from services import service_provider
 from services.analyzers import Analyzer
+from services.hardware_control import CameraPeripheralControl
 from services.image_sources import ImageSource
 from services.service_provider import ImageSourceProvider, AnalyzerProvider
 from services.simex_io import SimexIO
+from utils.QtScheduler import QtScheduler
 
 
 class LayoutMenu(QtWidgets.QMenu):
@@ -30,7 +32,7 @@ class LayoutMenu(QtWidgets.QMenu):
         value = settings.value("state")
         self.parent().restoreState(value, 0)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def refreshSavedLayouts(self):
         self.layout_list_menu.clear()
         layout_paths = glob.glob(os.path.join(self.layout_directory, "*.settings"))
@@ -43,7 +45,7 @@ class LayoutMenu(QtWidgets.QMenu):
                 action.triggered.connect(functools.partial(self.loadLayout, settings))
                 self.layout_list_menu.addAction(action)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def saveLayout(self):
         name, ok = QtWidgets.QInputDialog.getText(self, "Save layout as", "layout name")
         if not ok:
@@ -60,35 +62,33 @@ class LayoutMenu(QtWidgets.QMenu):
 
 
 class ImageSourceMenu(QtWidgets.QMenu):
-    configPrefix = "Image_Source"
+    config_prefix = "ImageSource"
 
     def __init__(self, parent=None):
         super().__init__("&Image source", parent)
-        self.config = config.SettingAccessor(self.configPrefix)
+        self.config = config.SettingAccessor(self.config_prefix)
         self.image_source_provider = ImageSourceProvider()
         self.logger = logging.getLogger("console")
         self.image_source_list_menu = QtWidgets.QMenu("&Image source", self)
         self.addMenu(self.image_source_list_menu)
 
         # lazy initialization because the external signal should be connected first. Otherwise the image may not display
-        th = QtCore.QThread(self)
-        th.started.connect(self.initMenu)
-        th.start()
+        QtScheduler(QtCore).schedule(lambda sc, state: self.initMenu())
 
     @staticmethod
-    @config.DefaultSettingRegistration(configPrefix)
-    def defaultSettings(configPrefix):
-        config.default_settings(configPrefix, [
+    @config.DefaultSettingRegistration(config_prefix)
+    def default_settings(config_prefix):
+        config.default_settings(config_prefix, [
             config.SettingRegistry("source", "")
         ])
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def initMenu(self):
         self.makeImageSourceMenu()
         self.addAction("C&onnect").triggered.connect(self.connectImageSource)
         self.addAction("&Disconnect").triggered.connect(self.disconnectImageSource)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def connectImageSource(self):
         try:
             image_source: ImageSource = self.image_source_provider.get_instance()
@@ -99,7 +99,7 @@ class ImageSourceMenu(QtWidgets.QMenu):
         image_source.start()
         self.logger.info("Image source connected")
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def disconnectImageSource(self):
         try:
             image_source: ImageSource = self.image_source_provider.get_instance()
@@ -110,7 +110,7 @@ class ImageSourceMenu(QtWidgets.QMenu):
         image_source.stop()
         self.logger.info("Image source disconnected")
 
-    @QtCore.pyqtSlot(QtWidgets.QAction)
+    @QtCore.Slot(QtWidgets.QAction)
     def agCallback(self, action: QtWidgets.QAction):
         try:
             text = action.text()
@@ -160,7 +160,7 @@ class AnalyzerMenu(QtWidgets.QMenu):
             config.SettingRegistry("analyzer", "")
         ])
 
-    @QtCore.pyqtSlot(QtWidgets.QAction)
+    @QtCore.Slot(QtWidgets.QAction)
     def agCallback(self, action: QtWidgets.QAction):
         try:
             text = action.text()
@@ -188,7 +188,7 @@ class AnalyzerMenu(QtWidgets.QMenu):
                 a.trigger()
             self.analyzer_choice_menu.addAction(a)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def connectAnalyzer(self):
         try:
             analyzer: Analyzer = self.analyzer_provider.get_instance()
@@ -200,7 +200,7 @@ class AnalyzerMenu(QtWidgets.QMenu):
         analyzer.start()
         self.logger.info("Analyzer connected")
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def disconnectAnalyzer(self):
         try:
             analyzer: Analyzer = self.analyzer_provider.get_instance()
@@ -223,3 +223,12 @@ class SimexMenu(QtWidgets.QMenu):
         disconnect_action = self.addAction("&Disconnect")
         disconnect_action.triggered.connect(lambda: self.simex_io_instance.disconnect())
 
+class HardwareControlMenu(QtWidgets.QMenu):
+    def __init__(self, parent=None):
+        super().__init__("&Hardware", parent)
+        self.camera_peripheral_control: CameraPeripheralControl = service_provider.CameraPeripheralControlService.get_or_create_instance(None)
+        self.camera_peripheral_control_menu = QtWidgets.QMenu("Camera &Peripheral", self)
+        self.camera_peripheral_control_menu.addAction("&Connect").triggered.connect(self.camera_peripheral_control.start)
+        self.camera_peripheral_control_menu.addAction("&Disconnect").triggered.connect(self.camera_peripheral_control.stop)
+
+        self.addMenu(self.camera_peripheral_control_menu)

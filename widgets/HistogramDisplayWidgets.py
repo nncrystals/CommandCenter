@@ -2,7 +2,6 @@ from typing import List
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt5 import QtCore
 
 import services.config as config_provider
 from data_class.distribution import EllipseDistribution, AreaDistribution
@@ -27,7 +26,7 @@ class HistogramWidget(PlotWidget):
         self.plotItem.addLegend()
 
         for conf in confs:
-            self.plots[conf.name] = self.plotItem.plot(brush=conf.brush, stepMode=True, fillLevel=0, name=conf.name)
+            self.plots[conf.name] = self.plotItem.plot([0, 0], [0] ,brush=conf.brush, stepMode=True, fillLevel=0, name=conf.name)
 
 
 class AreaDisplayWidget(HistogramWidget):

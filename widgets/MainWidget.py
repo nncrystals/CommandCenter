@@ -2,8 +2,9 @@ import logging
 import os
 import sys
 
-from PyQt5 import QtWidgets, QtCore, QtGui
-from PyQt5.QtWidgets import QDockWidget
+from PySide2 import QtWidgets, QtCore, QtGui
+from PySide2.QtWidgets import QDockWidget
+
 from rx import operators, disposable
 
 from services import service_provider
@@ -15,6 +16,7 @@ from widgets.ConsoleWidget import Console
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from widgets.ImageDisplayWidget import SimpleDisplayWidget
 from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu
+from widgets.SignalMapperWidget import SignalMapperWidget
 from widgets.TimelineWidget import TimelineWidget
 
 
@@ -35,7 +37,7 @@ class MainWidget(QtWidgets.QMainWindow):
         self.setWindowTitle("Command Center")
         self.showMaximized()
 
-        self.configureObservers()
+        self.configure_observers()
 
     def init_menu(self):
         menu_bar = self.menuBar()
@@ -66,7 +68,8 @@ class MainWidget(QtWidgets.QMainWindow):
             "areaDist": QtWidgets.QDockWidget("Area distribution", self),
             "ellipseDist": QtWidgets.QDockWidget("Ellipse distribution", self),
             "timeline": QtWidgets.QDockWidget("Timeline", self),
-            "console": QtWidgets.QDockWidget("Console", self)
+            "signal_mapper": QtWidgets.QDockWidget("Signal Mapper", self),
+            "console": QtWidgets.QDockWidget("Console", self),
         }
 
         # assign object name
@@ -79,11 +82,12 @@ class MainWidget(QtWidgets.QMainWindow):
         self.dockedPanels["areaDist"].setWidget(AreaDisplayWidget(self))
         self.dockedPanels["ellipseDist"].setWidget(EllipsesDisplayWidget(self))
         self.dockedPanels["timeline"].setWidget(TimelineWidget(self))
+        self.dockedPanels["signal_mapper"].setWidget(SignalMapperWidget(self))
         self.dockedPanels["console"].setWidget(Console(self))
 
         self.applyDefaultLayout()
 
-    def configureObservers(self):
+    def configure_observers(self):
         qt_scheduler = QtScheduler(QtCore)
         subject_provider = service_provider.SubjectProvider()
         subjects: Subjects = subject_provider.get_or_create_instance(None)
@@ -126,7 +130,7 @@ class MainWidget(QtWidgets.QMainWindow):
         self.subscriptions.dispose()
         super().closeEvent(a0)
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def applyDefaultLayout(self):
         v: QDockWidget
         mainPanel = self.dockedPanels["input"]
@@ -136,7 +140,7 @@ class MainWidget(QtWidgets.QMainWindow):
                 self.tabifyDockWidget(mainPanel, v)
         mainPanel.raise_()
 
-    @QtCore.pyqtSlot()
+    @QtCore.Slot()
     def showConnectionConfigDialog(self):
         dialog = ConfigDialog(self)
         dialog.exec()

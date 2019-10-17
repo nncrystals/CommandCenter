@@ -7,7 +7,7 @@ from typing import Union
 import numpy as np
 import pyqtgraph as pg
 from PIL import Image
-from PyQt5 import QtWidgets, QtCore
+from PySide2 import QtWidgets, QtCore
 
 from data_class.subject_data import AcquiredImage
 
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
 
     class ImageRequestWorker(QtCore.QThread):
-        imageReady = QtCore.pyqtSignal(np.ndarray)
+        imageReady = QtCore.Signal(np.ndarray)
 
         def __init__(self):
             super().__init__()
@@ -69,7 +69,7 @@ if __name__ == '__main__':
                     try:
                         img = Image.open(io.BytesIO(response.content))
                         img = np.asarray(img)
-                        self.imageReady.emit(img.transpose([1, 0, 2]))
+                        self.imageReady.emit(img.transpose([1, 0, 2]), )
                     except:
                         pass
                 time.sleep(1)

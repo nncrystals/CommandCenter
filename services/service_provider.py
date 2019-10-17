@@ -1,6 +1,7 @@
 import typing as T
 
 from services import subjects, image_sources, analyzers
+from services.hardware_control import CameraPeripheralControl, SerialCameraPeripheralControl
 from services.image_encoder import ImageEncoder, JPEGEncoder
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
@@ -175,3 +176,14 @@ class ImageEncoderProvider(ServiceProvider):
         "default": JPEGEncoder
     }
     _instance: ImageEncoder
+
+
+class CameraPeripheralControlService(ServiceProvider):
+    interface_typing = CameraPeripheralControl
+    default_type = SerialCameraPeripheralControl
+    name_mapping = {
+        "default": SerialCameraPeripheralControl
+    }
+    _instance: CameraPeripheralControl
+
+

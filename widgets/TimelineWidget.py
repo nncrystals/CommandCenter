@@ -6,13 +6,13 @@ from datetime import datetime
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt5 import QtWidgets, QtCore
+from Qt import QtWidgets, QtCore
 from pyqtgraph import PlotDataItem
 
 from data_class.subject_data import TimelineDataPoint
 from services import service_provider
 from services.subjects import Subjects
-from utils.QtScheduler import QtScheduler
+from rx.scheduler.mainloop import QtScheduler
 
 class TimeAxisItem(pg.AxisItem):
     def __init__(self, *args, **kwargs):
@@ -97,7 +97,7 @@ class TimelineWidget(pg.GraphicsLayoutWidget):
 if __name__ == '__main__':
     import rx
     from rx import operators
-    from utils import QtScheduler
+    from rx.scheduler.mainloop import QtScheduler
     import traceback as tb
 
     app = QtWidgets.QApplication([])
@@ -117,7 +117,7 @@ if __name__ == '__main__':
         def error_report(x):
             tb.print_stack()
 
-        sc = QtScheduler.QtScheduler(QtCore)
+        sc = QtScheduler(QtCore)
         rx.just(1).pipe(
             operators.delay(1.0, sc),
             operators.map(lambda x: timeline_widget.update_plot(TimelineDataPoint("plot_1", "series_1").add_new_point(1.2))),

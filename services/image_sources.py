@@ -5,10 +5,8 @@ from datetime import datetime
 from threading import Condition
 
 import cv2
-import numpy as np
 import rx
-from PIL import Image
-from PyQt5 import QtCore, QtWidgets
+from PySide2 import QtCore, QtWidgets
 from genicam2.gentl import TimeoutException
 from harvesters.core import Buffer
 from numpy import random
@@ -20,9 +18,7 @@ from data_class.subject_data import AcquiredImage
 from services import config
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
-from utils.backpressure import bp_operator
 from utils.observer import ErrorToConsoleObserver
-from rxpy_backpressure import BackPressure
 
 
 class ImageSource(object):
@@ -62,8 +58,8 @@ class MockImageSource(ImageSource):
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
-    def defaultSettings(configPrefix):
-        config.default_settings(configPrefix, [
+    def default_settings(config_prefix):
+        config.default_settings(config_prefix, [
             config.SettingRegistry("fps", 5, type="int"),
         ])
 
@@ -128,8 +124,8 @@ class HarvestersSource(ImageSource):
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
-    def defaultSettings(configPrefix):
-        config.default_settings(configPrefix, [
+    def defaultSettings(config_prefix):
+        config.default_settings(config_prefix, [
             config.SettingRegistry("cti_path", "/tmp/TL.cti", type="str", title="Path to .cti file"),
             config.SettingRegistry("gain", 0, type="float"),
             config.SettingRegistry("invert_polarity", False, type="bool", title="Invert polarity"),

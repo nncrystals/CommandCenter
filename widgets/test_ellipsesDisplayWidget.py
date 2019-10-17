@@ -2,7 +2,7 @@ import sys
 from unittest import TestCase
 
 import numpy as np
-from PyQt5 import QtWidgets, QtGui, QtCore
+from Qt import QtWidgets, QtGui, QtCore
 
 from widgets.HistogramDisplayWidgets import EllipsesDisplayWidget
 

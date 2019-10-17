@@ -33,7 +33,7 @@ def create_RxEvent_class(QtCore, qevent_type):
 
     class RxEvent(QtCore.QEvent):
         def __init__(self, scheduling, args):
-            QtCore.QEvent.__init__(self, qevent_type)
+            QtCore.QEvent.__init__(self, QtCore.QEvent.Type(qevent_type))
             self.args = args
             self.scheduling = scheduling
 

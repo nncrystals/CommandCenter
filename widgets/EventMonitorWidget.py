@@ -2,7 +2,7 @@ import datetime
 import sys
 import time
 
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PySide2 import QtWidgets, QtCore, QtGui
 import logging
 
 from utils.QtInterceptHandler import QtInterceptHandler
@@ -79,7 +79,7 @@ class EventMonitorWidget(QtWidgets.QListWidget):
         menu.addAction(clear)
         menu.exec(evt.globalPos())
 
-    @QtCore.pyqtSlot(int, str)
+    @QtCore.Slot
     def interceptMessage(self, level, message):
         item = QtWidgets.QListWidgetItem(self)
         entry = EventEntry(self, level, message)
