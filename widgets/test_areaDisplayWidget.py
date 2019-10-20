@@ -2,7 +2,7 @@ import sys
 from unittest import TestCase
 
 import numpy as np
-from Qt import QtWidgets, QtGui, QtCore
+from PySide2 import QtWidgets, QtGui, QtCore
 
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget
 

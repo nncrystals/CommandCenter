@@ -6,7 +6,7 @@ from datetime import datetime
 
 import numpy as np
 import pyqtgraph as pg
-from Qt import QtWidgets, QtCore
+from PySide2 import QtWidgets, QtCore
 from pyqtgraph import PlotDataItem
 
 from data_class.subject_data import TimelineDataPoint

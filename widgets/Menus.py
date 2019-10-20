@@ -3,6 +3,7 @@ import logging
 import os
 import traceback
 
+import PySide2
 from PySide2 import QtWidgets, QtCore
 from setuptools import glob
 from services import config
@@ -13,52 +14,52 @@ from services.image_sources import ImageSource
 from services.service_provider import ImageSourceProvider, AnalyzerProvider
 from services.simex_io import SimexIO
 from utils.QtScheduler import QtScheduler
+from widgets import SignalMappingDialog
+from widgets.CameraPeripheralDialog import CameraPeripheralDialog
 
 
 class LayoutMenu(QtWidgets.QMenu):
 
-    def __init__(self, layoutDirectory, parent=None):
+    def __init__(self, layout_directory, parent=None):
         super().__init__("&Layout", parent)
-        self.layout_directory = layoutDirectory
+        self.layout_directory = layout_directory
+        self.layout_path = os.path.join(layout_directory, "layout.settings")
         self.layout_list_menu = QtWidgets.QMenu("Load L&ayout", self)
-        self.layout_list_menu.aboutToShow.connect(self.refreshSavedLayouts)
+        self.layout_list_menu.aboutToShow.connect(self.refresh_saved_layouts)
         self.logger = logging.getLogger("console")
 
         self.addAction("&Default").triggered.connect(self.parent().applyDefaultLayout)
-        self.addAction("&Save layout").triggered.connect(self.saveLayout)
+        self.addAction("&Save layout").triggered.connect(self.save_layout)
         self.addMenu(self.layout_list_menu)
 
-    def loadLayout(self, settings):
-        value = settings.value("state")
-        self.parent().restoreState(value, 0)
+    def load_layout(self, state):
+        self.parent().restoreState(state, 0)
 
     @QtCore.Slot()
-    def refreshSavedLayouts(self):
+    def refresh_saved_layouts(self):
         self.layout_list_menu.clear()
-        layout_paths = glob.glob(os.path.join(self.layout_directory, "*.settings"))
-        if not layout_paths:
+        layout_path = self.layout_path
+        if not layout_path:
             self.layout_list_menu.addAction("No available layout").setDisabled(True)
         else:
-            for p in layout_paths:
-                settings = QtCore.QSettings(p, QtCore.QSettings.IniFormat)
-                action = QtWidgets.QAction(settings.value("layoutName"), self)
-                action.triggered.connect(functools.partial(self.loadLayout, settings))
-                self.layout_list_menu.addAction(action)
+            settings = QtCore.QSettings(layout_path, QtCore.QSettings.IniFormat)
+            for name in settings.childGroups():
+                self.layout_list_menu.addAction(name).triggered.connect(
+                    functools.partial(self.load_layout, settings.value(f"{name}/state")))
 
     @QtCore.Slot()
-    def saveLayout(self):
+    def save_layout(self):
         name, ok = QtWidgets.QInputDialog.getText(self, "Save layout as", "layout name")
         if not ok:
             return
         panel: QtWidgets.QDockWidget
-        settingPath = os.path.join(self.layout_directory, f"{name}.settings")
-        settings = QtCore.QSettings(settingPath,
+        setting_path = self.layout_path
+        settings = QtCore.QSettings(setting_path,
                                     QtCore.QSettings.IniFormat)
         state = self.parent().saveState(0)
-        settings.setValue("state", state)
-        settings.setValue("layoutName", name)
+        settings.setValue(f"{name}/state", state)
         settings.sync()
-        self.logger.info(f"Layout successfully saved to {settingPath}")
+        self.logger.info(f"Layout successfully saved to {setting_path}")
 
 
 class ImageSourceMenu(QtWidgets.QMenu):
@@ -223,12 +224,87 @@ class SimexMenu(QtWidgets.QMenu):
         disconnect_action = self.addAction("&Disconnect")
         disconnect_action.triggered.connect(lambda: self.simex_io_instance.disconnect())
 
+
 class HardwareControlMenu(QtWidgets.QMenu):
     def __init__(self, parent=None):
         super().__init__("&Hardware", parent)
-        self.camera_peripheral_control: CameraPeripheralControl = service_provider.CameraPeripheralControlService.get_or_create_instance(None)
+        self.camera_peripheral_control: CameraPeripheralControl = service_provider.CameraPeripheralControlService().get_or_create_instance(
+            None)
         self.camera_peripheral_control_menu = QtWidgets.QMenu("Camera &Peripheral", self)
-        self.camera_peripheral_control_menu.addAction("&Connect").triggered.connect(self.camera_peripheral_control.start)
-        self.camera_peripheral_control_menu.addAction("&Disconnect").triggered.connect(self.camera_peripheral_control.stop)
+        self.camera_peripheral_control_menu.addAction("&Connect").triggered.connect(
+            self.camera_peripheral_control.start)
+        self.camera_peripheral_control_menu.addAction("&Disconnect").triggered.connect(
+            self.camera_peripheral_control.stop)
+        self.camera_peripheral_control_menu.addSeparator()
+
+        allow_control_action = QtWidgets.QWidgetAction(self.camera_peripheral_control_menu)
+        checkbox = QtWidgets.QCheckBox("Allow Simex Control")
+        checkbox.stateChanged.connect(self.simex_control_updated)
+        allow_control_action.setDefaultWidget(checkbox)
+        self.camera_peripheral_control_menu.addAction(allow_control_action)
+
+        self.manual_control = self.camera_peripheral_control_menu.addAction("Manual &control")
+        self.manual_control.triggered.connect(self.manual_control_requested)
 
         self.addMenu(self.camera_peripheral_control_menu)
+
+    def simex_control_updated(self, ev):
+        if ev == QtCore.Qt.Checked:
+            self.manual_control.setDisabled(True)
+        else:
+            self.manual_control.setEnabled(True)
+
+    def manual_control_requested(self):
+        CameraPeripheralDialog(self).show()
+
+
+class SignalMappingMenu(QtWidgets.QAction):
+    def __init__(self, parent=None):
+        super().__init__("Signal &Mapping", parent)
+        self.triggered.connect(self.show_signal_mapping_dialog)
+
+    def show_signal_mapping_dialog(self):
+        dlg = SignalMappingDialog.SignalMappingDialog()
+        dlg.exec_()
+
+
+class QuickConnectMenu(QtWidgets.QMenu):
+    def __init__(self, parent=None):
+        super().__init__("&Quick Connect", parent)
+        self.logger = logging.getLogger("console")
+        self.addAction("Connect all").triggered.connect(self.connect_all)
+        self.addAction("Disconnect all").triggered.connect(self.disconnect_all)
+
+    def connect_all(self):
+        self.logger.info("Quick connect all elements")
+        try:
+            image_source: ImageSource = service_provider.ImageSourceProvider().get_instance()
+        except Exception as ex:
+            self.logger.error(ex)
+            return
+        try:
+            if image_source.is_running():
+                self.logger.info("Image source is already connected. Skip.")
+            else:
+                self.logger.info(f"Connecting image source: {image_source.get_name()}")
+                image_source.start()
+        except Exception as ex:
+            self.logger.error(f"Failed to connect to image source: {image_source.get_name()}")
+            return
+
+        try:
+            analyzer_source: Analyzer = service_provider.AnalyzerProvider().get_instance()
+        except Exception as ex:
+            self.logger.error(ex)
+            return
+        try:
+            if analyzer_source.is_running():
+                self.logger.info("Analyzer is already connected. Skip.")
+            else:
+                self.logger.info(f"Connecting to analyzer: {analyzer_source.get_name()}")
+                analyzer_source.start()
+        except Exception as ex:
+            self.logger.error(f"Failed to connect to analyzer: {analyzer_source.get_name()}")
+
+    def disconnect_all(self):
+        pass

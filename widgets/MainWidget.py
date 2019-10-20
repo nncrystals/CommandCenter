@@ -15,8 +15,8 @@ from widgets.ConfigDialog import ConfigDialog
 from widgets.ConsoleWidget import Console
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from widgets.ImageDisplayWidget import SimpleDisplayWidget
-from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu
-from widgets.SignalMapperWidget import SignalMapperWidget
+from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu, SignalMappingMenu, HardwareControlMenu, \
+    QuickConnectMenu
 from widgets.TimelineWidget import TimelineWidget
 
 
@@ -24,7 +24,7 @@ class MainWidget(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
         # declaration
-        self.layoutDirectory = os.path.abspath(os.path.join("Configs", "Layouts"))
+        self.layoutDirectory = os.path.abspath(os.path.join("Configs"))
         self.dockedPanels = None
         self.logger = logging.getLogger("console")
         self.imageSource = None
@@ -41,6 +41,7 @@ class MainWidget(QtWidgets.QMainWindow):
 
     def init_menu(self):
         menu_bar = self.menuBar()
+        menu_bar.addMenu(QuickConnectMenu(self))
         image_source_menu = ImageSourceMenu(self)
         menu_bar.addMenu(image_source_menu)
         menu_bar.addMenu(AnalyzerMenu(self))
@@ -51,6 +52,9 @@ class MainWidget(QtWidgets.QMainWindow):
 
         simex_menu = SimexMenu(self)
         menu_bar.addMenu(simex_menu)
+
+        menu_bar.addAction(SignalMappingMenu(self))
+        menu_bar.addMenu(HardwareControlMenu(self))
 
     @staticmethod
     def init_background_services():
@@ -68,7 +72,6 @@ class MainWidget(QtWidgets.QMainWindow):
             "areaDist": QtWidgets.QDockWidget("Area distribution", self),
             "ellipseDist": QtWidgets.QDockWidget("Ellipse distribution", self),
             "timeline": QtWidgets.QDockWidget("Timeline", self),
-            "signal_mapper": QtWidgets.QDockWidget("Signal Mapper", self),
             "console": QtWidgets.QDockWidget("Console", self),
         }
 
@@ -82,7 +85,6 @@ class MainWidget(QtWidgets.QMainWindow):
         self.dockedPanels["areaDist"].setWidget(AreaDisplayWidget(self))
         self.dockedPanels["ellipseDist"].setWidget(EllipsesDisplayWidget(self))
         self.dockedPanels["timeline"].setWidget(TimelineWidget(self))
-        self.dockedPanels["signal_mapper"].setWidget(SignalMapperWidget(self))
         self.dockedPanels["console"].setWidget(Console(self))
 
         self.applyDefaultLayout()

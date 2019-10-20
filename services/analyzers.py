@@ -47,6 +47,9 @@ class Analyzer(object):
         value = self.subjects.analyzer_back_pressure_detected.value
         return not value
 
+    def get_name(self):
+        raise NotImplementedError()
+
 
 class RemoteAnalyzer(Analyzer):
     config_prefix = "Remote_Analyzer"
@@ -62,6 +65,9 @@ class RemoteAnalyzer(Analyzer):
         self.process_scheduler = scheduler.ThreadPoolScheduler()
         self.subject_provider = services.service_provider.SubjectProvider()
         self.subjects: Subjects = self.subject_provider.get_or_create_instance(None)
+
+    def get_name(self):
+        return "remote"
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
@@ -196,6 +202,9 @@ class TestAnalyzer(Analyzer):
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.produce_fake_analyze_data))
         super(TestAnalyzer, self).start()
+
+    def get_name(self):
+        return "test"
 
     def stop(self):
         self._stop.on_next(0)

@@ -26,6 +26,3 @@ class Subjects(object):
 
     processed_distributions: typing.Subject[ProcessedDistributions, ProcessedDistributions] = subject.Subject()
     add_to_timeline: typing.Subject[TimelineDataPoint, TimelineDataPoint] = subject.Subject()
-
-    def __init__(self):
-        super(Subjects, self).__init__()

@@ -19,9 +19,9 @@ class ServiceProvider(object):
 
     def _create_instance(self, class_type: T.Union[str, type], *args, **kwargs):
         if isinstance(class_type, str):
-            class_type = self.name_mapping[class_type]
+            class_type = self.__class__.name_mapping[class_type]
 
-        if not issubclass(class_type, self.interface_typing):
+        if not issubclass(class_type, self.__class__.interface_typing):
             raise RuntimeError(f"type {class_type.__name__} is not a subclass of {self.interface_typing.__name__}")
 
         return class_type(*args, **kwargs)
@@ -41,10 +41,10 @@ class ServiceProvider(object):
         Return instance or fail
         :return:
         """
-        if self._instance is None:
+        if self.__class__._instance is None:
             raise RuntimeError("instance is not created, cannot get_instance")
 
-        return self._instance
+        return self.__class__._instance
 
     def get_or_create_instance(self, class_type, *args, **kwargs):
         """
@@ -55,17 +55,17 @@ class ServiceProvider(object):
         :return:
         """
         if class_type is None:
-            if self.default_type is None:
+            if self.__class__.default_type is None:
                 raise RuntimeError(
                     f"{type(self).__name__} does not have default_type. get_or_create_instance must be used with a type"
                 )
             else:
-                class_type = self.default_type
+                class_type = self.__class__.default_type
 
-        if self._instance is None:
+        if self.__class__._instance is None:
             self._assign_instance(self._create_instance(class_type, *args, **kwargs))
 
-        return self._instance
+        return self.__class__._instance
 
     def replace_instance_with(self, new_object: T.Union[str, object], *args, **kwargs):
         """
@@ -74,24 +74,24 @@ class ServiceProvider(object):
         :return:
         """
 
-        if self._instance is not None:
+        if self.__class__._instance is not None:
             # Instance should be disposed.
             if not self._check_allow_unload():
                 raise RuntimeError("The service is not at unload-able state")
             self._unload_service()
 
         if isinstance(new_object, str):
-            class_type = self.name_mapping[new_object]
+            class_type = self.__class__.name_mapping[new_object]
             self._assign_instance(self._create_instance(class_type, *args, **kwargs))
 
-        elif isinstance(new_object, self.interface_typing):
+        elif isinstance(new_object, self.__class__.interface_typing):
             self._assign_instance(new_object)
 
     def _assign_instance(self, new_instance: object):
-        if not isinstance(new_instance, self.interface_typing):
+        if not isinstance(new_instance, self.__class__.interface_typing):
             raise TypeError(
-                f"{type(new_instance).__name__} is not a subclass of {type(self.interface_typing).__name__}")
-        self._instance = new_instance
+                f"{type(new_instance).__name__} is not a subclass of {type(self.__class__.interface_typing).__name__}")
+        self.__class__._instance = new_instance
 
 
 class ImageSourceProvider(ServiceProvider):
@@ -107,10 +107,10 @@ class ImageSourceProvider(ServiceProvider):
         super(ImageSourceProvider, self).__init__()
 
     def _unload_service(self):
-        self._instance.stop()
+        self.__class__._instance.stop()
 
     def _check_allow_unload(self) -> bool:
-        return not self._instance.is_running()
+        return not self.__class__._instance.is_running()
 
 
 class SubjectProvider(ServiceProvider):
@@ -130,10 +130,10 @@ class AnalyzerProvider(ServiceProvider):
     _instance: analyzers.Analyzer
 
     def _unload_service(self):
-        self._instance.stop()
+        self.__class__._instance.stop()
 
     def _check_allow_unload(self) -> bool:
-        return not self._instance.is_running()
+        return not self.__class__._instance.is_running()
 
 
 class ResultProcessorProvider(ServiceProvider):
@@ -145,7 +145,7 @@ class ResultProcessorProvider(ServiceProvider):
     _instance: ResultProcessor
 
     def _unload_service(self):
-        self._instance.finalize()
+        self.__class__._instance.finalize()
 
 
 class ResultSaverProvider(ServiceProvider):
@@ -157,7 +157,7 @@ class ResultSaverProvider(ServiceProvider):
     _instance: ResultSaver
 
     def _unload_service(self):
-        self._instance.finalize()
+        self.__class__._instance.finalize()
 
 
 class SimexIOProvider(ServiceProvider):

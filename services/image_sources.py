@@ -1,6 +1,8 @@
 import glob
 import logging
 import os
+import time
+from abc import abstractclassmethod
 from datetime import datetime
 from threading import Condition
 
@@ -10,11 +12,13 @@ from PySide2 import QtCore, QtWidgets
 from genicam2.gentl import TimeoutException
 from harvesters.core import Buffer
 from numpy import random
+from pyqtgraph.flowchart import Node
 from rx import operators, disposable, subject, scheduler
 from rx.scheduler import ThreadPoolScheduler
 
 import services.service_provider
 from data_class.subject_data import AcquiredImage
+from flowchart.base import register_flowchart_element, register_flowchart_source
 from services import config
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
@@ -43,6 +47,9 @@ class ImageSource(object):
     def next_image(self, img: AcquiredImage):
         self.subjects.image_producer.on_next(img)
 
+    def get_name(self):
+        raise NotImplementedError()
+
 
 class MockImageSource(ImageSource):
     config_prefix = "Test_Images"
@@ -55,6 +62,9 @@ class MockImageSource(ImageSource):
         self._stop = subject.Subject()
         self.running = False
         self.feed_scheduler = ThreadPoolScheduler()
+
+    def get_name(self):
+        return "test"
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
@@ -118,6 +128,9 @@ class HarvestersSource(ImageSource):
         self.running = False
         self.scheduler = scheduler.NewThreadScheduler()
         self.scheduler.schedule(lambda sc, state: self.driver.update_device_info_list())
+
+    def get_name(self):
+        return "haravesters"
 
     def is_running(self):
         return self.running
@@ -196,6 +209,9 @@ class MediaFileSource(ImageSource):
         self._stop = subject.Subject()
         self.logger = logging.getLogger("console")
         self.back_pressure_lock = Condition()
+
+    def get_name(self):
+        return "file"
 
     def start(self):
         if not self.subjects.analyzer_connected.value:

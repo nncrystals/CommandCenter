@@ -2,7 +2,7 @@ import sys
 from pydoc import locate
 
 import pyqtgraph.parametertree as pgp
-from Qt import QtWidgets, QtGui, QtCore
+from PySide2 import QtWidgets, QtGui, QtCore
 
 from services import config
 # parse the config file
