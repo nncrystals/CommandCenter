@@ -9,7 +9,7 @@ from setuptools import glob
 from services import config
 from services import service_provider
 from services.analyzers import Analyzer
-from services.hardware_control import CameraPeripheralControl
+from services.camera_peripheral_control import CameraPeripheralControl
 from services.image_sources import ImageSource
 from services.service_provider import ImageSourceProvider, AnalyzerProvider
 from services.simex_io import SimexIO

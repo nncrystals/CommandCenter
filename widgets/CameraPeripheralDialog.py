@@ -1,6 +1,6 @@
 from PySide2 import QtWidgets, QtGui, QtCore
 
-from services.hardware_control import CameraPeripheralControl, CameraPeripheralControlParams
+from services.camera_peripheral_control import CameraPeripheralControl, CameraPeripheralControlParams
 from services.service_provider import CameraPeripheralControlService
 
 

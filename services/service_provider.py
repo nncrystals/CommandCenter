@@ -1,7 +1,7 @@
 import typing as T
 
 from services import subjects, image_sources, analyzers
-from services.hardware_control import CameraPeripheralControl, SerialCameraPeripheralControl
+from services.camera_peripheral_control import CameraPeripheralControl, SerialCameraPeripheralControl
 from services.image_encoder import ImageEncoder, JPEGEncoder
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
