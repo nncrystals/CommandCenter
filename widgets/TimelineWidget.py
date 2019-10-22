@@ -4,6 +4,7 @@ Automatically grab the value to be plotted from the service provider.
 from collections import OrderedDict
 from datetime import datetime
 
+import PySide2
 import numpy as np
 import pyqtgraph as pg
 from PySide2 import QtWidgets, QtCore
@@ -20,6 +21,18 @@ class TimeAxisItem(pg.AxisItem):
 
     def tickStrings(self, values, scale, spacing):
         return [datetime.fromtimestamp(value).strftime("%x %X") for value in values]
+
+class TimelineWidgetWrapper(QtWidgets.QWidget):
+
+    def __init__(self, parent: None):
+        super().__init__(parent)
+        sa = QtWidgets.QScrollArea(self)
+        self.setLayout(QtWidgets.QVBoxLayout(self))
+        self.layout().addWidget(sa)
+        self.timeline = TimelineWidget(sa)
+        sa.setWidget(self.timeline)
+        sa.setWidgetResizable(True)
+
 
 
 class TimelineWidget(pg.GraphicsLayoutWidget):

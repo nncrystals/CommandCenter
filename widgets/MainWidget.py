@@ -15,9 +15,9 @@ from widgets.ConfigDialog import ConfigDialog
 from widgets.ConsoleWidget import Console
 from widgets.HistogramDisplayWidgets import AreaDisplayWidget, EllipsesDisplayWidget
 from widgets.ImageDisplayWidget import SimpleDisplayWidget
-from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SimexMenu, SignalMappingMenu, HardwareControlMenu, \
-    QuickConnectMenu
-from widgets.TimelineWidget import TimelineWidget
+from widgets.Menus import ImageSourceMenu, LayoutMenu, AnalyzerMenu, SignalMappingMenu, HardwareControlMenu, \
+    QuickConnectMenu, SOPMenu
+from widgets.TimelineWidget import TimelineWidget, TimelineWidgetWrapper
 
 
 class MainWidget(QtWidgets.QMainWindow):
@@ -47,14 +47,12 @@ class MainWidget(QtWidgets.QMainWindow):
         menu_bar.addMenu(AnalyzerMenu(self))
         menu_bar.addMenu(LayoutMenu(self.layoutDirectory, self))
 
+        menu_bar.addMenu(HardwareControlMenu(self))
+        menu_bar.addMenu(SOPMenu(self))
+
         configuration_action = menu_bar.addAction("&Configuration")
         configuration_action.triggered.connect(self.showConnectionConfigDialog)
 
-        simex_menu = SimexMenu(self)
-        menu_bar.addMenu(simex_menu)
-
-        menu_bar.addAction(SignalMappingMenu(self))
-        menu_bar.addMenu(HardwareControlMenu(self))
 
     @staticmethod
     def init_background_services():
@@ -84,7 +82,7 @@ class MainWidget(QtWidgets.QMainWindow):
         self.dockedPanels["processed"].setWidget(SimpleDisplayWidget(self))
         self.dockedPanels["areaDist"].setWidget(AreaDisplayWidget(self))
         self.dockedPanels["ellipseDist"].setWidget(EllipsesDisplayWidget(self))
-        self.dockedPanels["timeline"].setWidget(TimelineWidget(self))
+        self.dockedPanels["timeline"].setWidget(TimelineWidgetWrapper(self))
         self.dockedPanels["console"].setWidget(Console(self))
 
         self.applyDefaultLayout()
@@ -125,7 +123,7 @@ class MainWidget(QtWidgets.QMainWindow):
 
         self.subscriptions.add(
             subjects.add_to_timeline.pipe(operators.observe_on(qt_scheduler)).subscribe(
-                ErrorToConsoleObserver(self.dockedPanels["timeline"].widget().update_plot))
+                ErrorToConsoleObserver(self.dockedPanels["timeline"].widget().timeline.update_plot))
         )
 
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:

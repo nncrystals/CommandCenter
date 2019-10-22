@@ -81,7 +81,7 @@ class ResultSaver(object):
         _detects = []
         for detect in data.objs:
             detect: dict = detect.__dict__.copy()
-            detect.pop("mask")
+            # detect.pop("mask")
             _detects.append(detect)
         with open(path, "a+b") as f:
             f.write(msgpack.packb({"name": data.image_id, "labels": _detects}))

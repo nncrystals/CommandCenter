@@ -1,5 +1,6 @@
 import math
 import random
+from pycocotools import mask as mask_util
 
 import cv2
 import numpy as np
@@ -15,7 +16,7 @@ def render_inference(image_buf, detections: grpc_def.ResultPerImage, alpha=0.4):
     mask_channel = np.zeros([im.shape[0], im.shape[1]], dtype=bool)
     overlay = np.zeros_like(im)
     for d in detected_objects:
-        m = d.mask
+        m = mask_util.decode(d.maskRLE)
         m.dtype = bool
         mask_channel[m] = True
         overlay[m] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
@@ -24,6 +25,7 @@ def render_inference(image_buf, detections: grpc_def.ResultPerImage, alpha=0.4):
     im[mask_channel] = im[mask_channel] * (1 - alpha) + overlay[mask_channel] * alpha
 
     for d in detected_objects:
+
         b = d.bbox
         l = d.label
         s = d.score

@@ -104,7 +104,7 @@ class InferenceComm(object):
         bbox = detection.bbox
         detected_object.label = detection.category
         detected_object.maskRLE = rle
-        detected_object.mask = mask_util.decode(rle)
+        # detected_object.mask = mask_util.decode(rle)
         detected_object.bbox = (bbox.xlt, bbox.ylt, bbox.xrb, bbox.yrb)
         detected_object.score = detection.confidence
         return detected_object

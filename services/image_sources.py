@@ -9,12 +9,12 @@ import rx
 from PySide2 import QtCore, QtWidgets
 from genicam2.gentl import TimeoutException
 from harvesters.core import Buffer
-from numpy import random
+import numpy as np
 from rx import operators, disposable, subject, scheduler
 from rx.scheduler import ThreadPoolScheduler
 
 import services.service_provider
-from data_class.subject_data import AcquiredImage
+from data_class.subject_data import AcquiredImage, TimelineDataPoint
 from services import config
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
@@ -81,7 +81,7 @@ class MockImageSource(ImageSource):
         return images
 
     def generate_image(self):
-        idx = random.choice(len(self.images), 1)[0]
+        idx = np.random.choice(len(self.images), 1)[0]
         img = self.images[idx]
         return img
 
@@ -120,7 +120,6 @@ class HarvestersSource(ImageSource):
         self.driver = Harvester()
         self.driver.add_cti_file(self.config["cti_path"])
         self.acquirer = None
-        self.simex_instance = None
         self.running = False
         self.scheduler = scheduler.NewThreadScheduler()
         self.scheduler.schedule(lambda sc, state: self.driver.update_device_info_list())
@@ -149,8 +148,9 @@ class HarvestersSource(ImageSource):
             component = payload.components[0]
             width = component.width
             height = component.height
-            content = component.data.reshape(height, width)
-            self.next_image(AcquiredImage(content.copy(), time.time(), f"{time}.jpg"))
+            content: np.ndarray = component.data.reshape(height, width)
+            t = time.time()
+            self.next_image(AcquiredImage(content.copy(), t, f"{t}.jpg"))
             buffer.queue()
         except TimeoutException as ex:
             pass

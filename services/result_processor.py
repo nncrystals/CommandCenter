@@ -5,7 +5,7 @@ Process the raw masks from analyzer.
 - report number of object
 """
 from typing import List
-
+from pycocotools import mask as mask_util
 import cv2
 import numpy as np
 from rx import operators
@@ -40,6 +40,7 @@ class ResultProcessor(object):
         config.default_settings(configPrefix, [
             config.SettingRegistry("group_size", 10, type="int", title="Group size (images)"),
             config.SettingRegistry("calibration_ratio", 0, type="float", title="Length (micrometer) per pixel"),
+            config.SettingRegistry("conf_threshold", 0.8, type="float", title="Confidence threshold"),
             config.SettingRegistry("crop_threshold", 0, type="int",
                                    title="Edge cropping object threshold (pixels)")
         ])
@@ -54,23 +55,30 @@ class ResultProcessor(object):
             operators.take_until(self._stop),
         ).subscribe(ErrorToConsoleObserver(self.render_sample_image))
 
-    def filter_cropped(self, detections, threshold):
-        if threshold == 0:
-            return detections
-        ret = []
+    def filter_unwanted(self, detections):
+        crop_threshold = self.config["crop_threshold"]
+        conf_threshold = self.config["conf_threshold"]
+
+        filtered = []
         detection: DetectedObject
-        for detection in detections:
-            xlt, ylt, xrb, yrb = detection.bbox
-            image_height, image_width = detection.maskRLE["size"]
-            if xlt <= float(
-                    threshold) or ylt <= threshold or image_width - xrb <= threshold or image_height - yrb <= threshold:
-                continue
-            else:
-                ret.append(detection)
+        if conf_threshold != 0:
+            for detection in detections:
+                if detection.score > conf_threshold:
+                    filtered.append(detection)
+        ret = []
+        if crop_threshold != 0:
+            for detection in filtered:
+                xlt, ylt, xrb, yrb = detection.bbox
+                image_height, image_width = detection.maskRLE["size"]
+                if xlt <= float(
+                        crop_threshold) or ylt <= crop_threshold or image_width - xrb <= crop_threshold or image_height - yrb <= crop_threshold:
+                    continue
+                else:
+                    ret.append(detection)
         return ret
 
     def render_sample_image(self, data: SampleImageData):
-        detections = self.filter_cropped(data.labels, self.config["crop_threshold"])
+        detections = self.filter_unwanted(data.labels)
         rendered = render_inference(data.image, detections)
         self.subjects.rendered_sample_image_producer.on_next(rendered)
 
@@ -79,12 +87,12 @@ class ResultProcessor(object):
         minors = []
         majors = []
         for d in data:
-            detections_per_image = self.filter_cropped(d.objs, self.config["crop_threshold"])
+            detections_per_image = self.filter_unwanted(d.objs)
             for detections in detections_per_image:
-
-                areas.append(detections.mask.sum())
-                detections.mask.dtype = np.uint8
-                contours, _ = cv2.findContours(detections.mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                mask = mask_util.decode(detections.maskRLE)
+                areas.append(mask.sum())
+                mask.dtype = np.uint8
+                contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 max_area = 0
                 biggest_contour = None
                 for c in contours:
@@ -105,8 +113,11 @@ class ResultProcessor(object):
             area_dist = AreaDistribution(areas)
             ellipse_dist = EllipseDistribution(majors, minors)
         else:
-            area_dist = AreaDistribution(areas * calibration_ratio, "<math>&mu;m<sup>2</sup></math>")
-            ellipse_dist = EllipseDistribution(majors * calibration_ratio, minors * calibration_ratio,
+            areas = areas * calibration_ratio
+            area_dist = AreaDistribution(areas, "<math>&mu;m<sup>2</sup></math>")
+            majors = majors * calibration_ratio
+            minors = minors * calibration_ratio
+            ellipse_dist = EllipseDistribution(majors, minors,
                                                "<math>&mu;m</math>")
 
         self.subjects.processed_distributions.on_next(
@@ -114,5 +125,11 @@ class ResultProcessor(object):
         self.subjects.add_to_timeline.on_next(
             TimelineDataPoint("Particles per frame", "class 1").add_new_point(len(areas) / len(data)))
 
+        self.subjects.add_to_timeline.on_next(
+            TimelineDataPoint("Ellipse average size", "minor").add_new_point(float(minors.mean())))
+        self.subjects.add_to_timeline.on_next(
+            TimelineDataPoint("Ellipse average size", "major").add_new_point(float(majors.mean())))
+        self.subjects.add_to_timeline.on_next(
+            TimelineDataPoint("Area average size", "area").add_new_point(float(areas.mean())))
     def finalize(self):
         self._stop.on_next(True)

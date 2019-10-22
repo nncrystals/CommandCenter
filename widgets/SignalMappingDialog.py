@@ -5,7 +5,6 @@ from PySide2 import QtWidgets, QtGui, QtCore
 from pyqtgraph import flowchart
 
 from services.service_provider import SubjectProvider
-from flowchart import base as fb
 import pyqtgraph.flowchart.library as fclib
 
 from services.subjects import Subjects

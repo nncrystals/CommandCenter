@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 
 from rx import operators, subject
 
+from data_class.subject_data import TimelineDataPoint
 from services import config
 import serial
 
@@ -76,9 +77,9 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
             return
 
         self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
-        self.subjects.simex_camera_peripheral_control.pipe(
+        self.subjects.camera_peripheral_control.pipe(
             operators.take_until(self._stop)
-        ).subscribe(self.simex_recv)
+        ).subscribe(self.control_requested)
 
         self.logger.info("Successfully connect to camera peripheral control.")
         super().start()
@@ -123,6 +124,8 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
                 self.stored_parameters.pulse_width_tick = param.pulse_width_tick
                 self.serial.write(f"s_exposure {param.pulse_width_tick}\ncommit\n".encode())
                 self.logger.debug(f"Pulse width updated to {param.pulse_width_tick}")
+                self.subjects.add_to_timeline.on_next(
+                    TimelineDataPoint("Exposure time", "ticks").add_new_point(param.pulse_width_tick))
             if param.start_delay != self.stored_parameters.start_delay and param.start_delay is not None:
                 self.stored_parameters.start_delay = param.start_delay
                 self.serial.write(f"s_delay {param.start_delay}\ncommit\n".encode())
@@ -152,7 +155,7 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
     def get_state(self):
         return self.stored_parameters
 
-    def simex_recv(self, x: CameraPeripheralControlParams):
+    def control_requested(self, x: CameraPeripheralControlParams):
         if x.power is not None:
             self.set_power(bool(x.power))
         if x.trigger is not None:

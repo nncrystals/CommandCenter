@@ -13,7 +13,6 @@ from services.camera_peripheral_control import CameraPeripheralControl
 from services.image_sources import ImageSource
 from services.pump_control import PumpControl
 from services.service_provider import ImageSourceProvider, AnalyzerProvider, PumpControlService
-from services.simex_io import SimexIO
 from utils.QtScheduler import QtScheduler
 from widgets import SignalMappingDialog
 from widgets.CameraPeripheralDialog import CameraPeripheralDialog
@@ -216,17 +215,6 @@ class AnalyzerMenu(QtWidgets.QMenu):
         self.logger.info("Analyzer disconnected")
 
 
-class SimexMenu(QtWidgets.QMenu):
-    def __init__(self, parent=None):
-        super().__init__("Simex", parent)
-        self.simex_io_instance: SimexIO = service_provider.SimexIOProvider().get_or_create_instance(None)
-
-        connect_action = self.addAction("&Connect")
-        connect_action.triggered.connect(lambda: self.simex_io_instance.connect().subscribe())
-        disconnect_action = self.addAction("&Disconnect")
-        disconnect_action.triggered.connect(lambda: self.simex_io_instance.disconnect())
-
-
 class HardwareControlMenu(QtWidgets.QMenu):
     def __init__(self, parent=None):
         super().__init__("&Hardware", parent)
@@ -258,6 +246,7 @@ class HardwareControlMenu(QtWidgets.QMenu):
     def pump_manual_control(self):
         PumpControlDialog(self).show()
 
+
 class SignalMappingMenu(QtWidgets.QAction):
     def __init__(self, parent=None):
         super().__init__("Signal &Mapping", parent)
@@ -272,39 +261,94 @@ class QuickConnectMenu(QtWidgets.QMenu):
     def __init__(self, parent=None):
         super().__init__("&Quick Connect", parent)
         self.logger = logging.getLogger("console")
-        self.addAction("Connect all").triggered.connect(self.connect_all)
-        self.addAction("Disconnect all").triggered.connect(self.disconnect_all)
+        self.addAction("Connect all").triggered.connect(lambda: self.connect_all(True))
+        self.addAction("Disconnect all").triggered.connect(lambda: self.connect_all(False))
 
-    def connect_all(self):
-        self.logger.info("Quick connect all elements")
+    def connect_all(self, connect):
         try:
             image_source: ImageSource = service_provider.ImageSourceProvider().get_instance()
         except Exception as ex:
             self.logger.error(ex)
             return
-        try:
-            if image_source.is_running():
-                self.logger.info("Image source is already connected. Skip.")
-            else:
-                self.logger.info(f"Connecting image source: {image_source.get_name()}")
-                image_source.start()
-        except Exception as ex:
-            self.logger.error(f"Failed to connect to image source: {image_source.get_name()}")
-            return
+        if connect:
+            try:
+                if image_source.is_running():
+                    self.logger.info("Image source is already connected. Skip.")
+                else:
+                    self.logger.info(f"Connecting image source: {image_source.get_name()}")
+                    image_source.start()
+            except Exception as ex:
+                self.logger.error(f"Failed to connect to image source: {image_source.get_name()}")
+                return
+        else:
+            try:
+                image_source.stop()
+            except Exception as ex:
+                self.logger.error(f"Failed to stop image source: {ex}")
 
         try:
             analyzer_source: Analyzer = service_provider.AnalyzerProvider().get_instance()
         except Exception as ex:
             self.logger.error(ex)
             return
+        if connect:
+            try:
+                if analyzer_source.is_running():
+                    self.logger.info("Analyzer is already connected. Skip.")
+                else:
+                    self.logger.info(f"Connecting to analyzer: {analyzer_source.get_name()}")
+                    analyzer_source.start()
+            except Exception as ex:
+                self.logger.error(f"Failed to connect to analyzer: {analyzer_source.get_name()}")
+        else:
+            try:
+                analyzer_source.stop()
+            except Exception as ex:
+                self.logger.error(f"Failed to stop analyzer: {ex}")
         try:
-            if analyzer_source.is_running():
-                self.logger.info("Analyzer is already connected. Skip.")
+            camera_periph_control: CameraPeripheralControl = service_provider.CameraPeripheralControlService().get_or_create_instance(None)
+            if connect:
+                if not camera_periph_control.is_running():
+                    camera_periph_control.start()
             else:
-                self.logger.info(f"Connecting to analyzer: {analyzer_source.get_name()}")
-                analyzer_source.start()
+                camera_periph_control.stop()
         except Exception as ex:
-            self.logger.error(f"Failed to connect to analyzer: {analyzer_source.get_name()}")
+            self.logger.error(f"Failed to update to camera peripheral control: {ex}")
 
-    def disconnect_all(self):
-        pass
+        try:
+            pump_control: PumpControl = service_provider.PumpControlService().get_or_create_instance(None)
+            if connect:
+                if not pump_control.is_running():
+                    pump_control.start()
+            else:
+                pump_control.stop()
+        except Exception as ex:
+            self.logger.error(f"Failed to update to pump control: {ex}")
+
+
+class SOPMenu(QtWidgets.QMenu):
+
+    def __init__(self, parent=None):
+        super().__init__("&SOP", parent)
+        self.refresh_ui()
+
+    def refresh_ui(self):
+        from services.sop import _sop
+        from pluginbase import PluginBase
+        self.plugin_base = PluginBase(package='plugins')
+
+        self.plugin_source = self.plugin_base.make_plugin_source(
+            searchpath=['plugins', 'sop'])
+
+        _sop.clear()
+        self.clear()
+
+        self.addAction("&Refresh").triggered.connect(self.refresh_ui)
+        self.addSeparator()
+
+        # find plugins
+        for plugin in self.plugin_source.list_plugins():
+            self.plugin_source.load_plugin(plugin)
+
+        for s in _sop:
+            self.addAction(s.get_name())#.triggered.connect(s.start)

@@ -6,7 +6,6 @@ from services.image_encoder import ImageEncoder, JPEGEncoder
 from services.pump_control import PumpControl, ModBusPumpControl
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
-from services.simex_io import SimexIO
 
 
 class ServiceProvider(object):
@@ -159,15 +158,6 @@ class ResultSaverProvider(ServiceProvider):
 
     def _unload_service(self):
         self.__class__._instance.finalize()
-
-
-class SimexIOProvider(ServiceProvider):
-    interface_typing = SimexIO
-    default_type = SimexIO
-    name_mapping = {
-        "default": SimexIO
-    }
-    _instance: SimexIO
 
 
 class ImageEncoderProvider(ServiceProvider):

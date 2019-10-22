@@ -4,7 +4,6 @@ import numpy as np
 from rx import subject
 from rx import typing
 
-from data_class.detected_objects import DetectedObject
 
 from data_class.subject_data import ProcessedDistributions, AcquiredImage, SampleImageData, TimelineDataPoint, \
     DetectionsInImage

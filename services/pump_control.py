@@ -9,6 +9,7 @@ from pymodbus.client.sync import ModbusSerialClient
 from rx import scheduler, subject, operators
 
 import services
+from data_class.subject_data import TimelineDataPoint
 from services import config
 from services.subjects import Subjects
 
@@ -115,10 +116,12 @@ class ModBusPumpControl(PumpControl):
         if slurry_speed is not None and slurry_speed != self.state[0]:
             self.ctrl_pump(self.config["slurry_pump_addr"], slurry_speed)
             self.logger.info(f"Slurry pump speed updated: {slurry_speed}")
+            self.subjects.add_to_timeline.on_next(TimelineDataPoint("Pump speed", "slurry pump").add_new_point(slurry_speed))
             self.state[0] = slurry_speed
         if clear_speed is not None and clear_speed != self.state[1]:
             self.ctrl_pump(self.config["clear_pump_addr"], clear_speed)
             self.logger.info(f"Clear pump speed updated: {clear_speed}")
+            self.subjects.add_to_timeline.on_next(TimelineDataPoint("Pump speed", "clear pump").add_new_point(clear_speed))
             self.state[1] = clear_speed
 
     def enable_remote_control(self, enable=True):
