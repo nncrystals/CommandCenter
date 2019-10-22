@@ -11,11 +11,13 @@ from services import service_provider
 from services.analyzers import Analyzer
 from services.camera_peripheral_control import CameraPeripheralControl
 from services.image_sources import ImageSource
-from services.service_provider import ImageSourceProvider, AnalyzerProvider
+from services.pump_control import PumpControl
+from services.service_provider import ImageSourceProvider, AnalyzerProvider, PumpControlService
 from services.simex_io import SimexIO
 from utils.QtScheduler import QtScheduler
 from widgets import SignalMappingDialog
 from widgets.CameraPeripheralDialog import CameraPeripheralDialog
+from widgets.PumpControlDialog import PumpControlDialog
 
 
 class LayoutMenu(QtWidgets.QMenu):
@@ -230,33 +232,31 @@ class HardwareControlMenu(QtWidgets.QMenu):
         super().__init__("&Hardware", parent)
         self.camera_peripheral_control: CameraPeripheralControl = service_provider.CameraPeripheralControlService().get_or_create_instance(
             None)
-        self.camera_peripheral_control_menu = QtWidgets.QMenu("Camera &Peripheral", self)
+        self.camera_peripheral_control_menu = QtWidgets.QMenu("Camera &control", self)
         self.camera_peripheral_control_menu.addAction("&Connect").triggered.connect(
             self.camera_peripheral_control.start)
         self.camera_peripheral_control_menu.addAction("&Disconnect").triggered.connect(
             self.camera_peripheral_control.stop)
         self.camera_peripheral_control_menu.addSeparator()
-
-        allow_control_action = QtWidgets.QWidgetAction(self.camera_peripheral_control_menu)
-        checkbox = QtWidgets.QCheckBox("Allow Simex Control")
-        checkbox.stateChanged.connect(self.simex_control_updated)
-        allow_control_action.setDefaultWidget(checkbox)
-        self.camera_peripheral_control_menu.addAction(allow_control_action)
-
-        self.manual_control = self.camera_peripheral_control_menu.addAction("Manual &control")
-        self.manual_control.triggered.connect(self.manual_control_requested)
+        self.camera_peripheral_control_menu.addAction("Manual &control").triggered.connect(
+            self.camera_peripherial_manual_control)
 
         self.addMenu(self.camera_peripheral_control_menu)
 
-    def simex_control_updated(self, ev):
-        if ev == QtCore.Qt.Checked:
-            self.manual_control.setDisabled(True)
-        else:
-            self.manual_control.setEnabled(True)
+        # Pump control
+        self.pump_control: PumpControl = service_provider.PumpControlService().get_or_create_instance(None)
+        self.pump_control_menu = QtWidgets.QMenu("&Pump control", self)
+        self.pump_control_menu.addAction("&Connect").triggered.connect(self.pump_control.start)
+        self.pump_control_menu.addAction("&Disconnect").triggered.connect(self.pump_control.stop)
+        self.pump_control_menu.addSeparator()
+        self.pump_control_menu.addAction("Manual &control").triggered.connect(self.pump_manual_control)
+        self.addMenu(self.pump_control_menu)
 
-    def manual_control_requested(self):
+    def camera_peripherial_manual_control(self):
         CameraPeripheralDialog(self).show()
 
+    def pump_manual_control(self):
+        PumpControlDialog(self).show()
 
 class SignalMappingMenu(QtWidgets.QAction):
     def __init__(self, parent=None):

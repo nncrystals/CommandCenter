@@ -1,21 +1,32 @@
 import enum
 import logging
 import time
+from typing import List
 
 import numpy as np
 import rx
 import simex
 from rx import operators, subject, scheduler
 from rx.disposable import Disposable
+from simex import SimexPort
 
 from services import config
 import services.service_provider
+from services.camera_peripheral_control import CameraPeripheralControlParams
 from services.subjects import Subjects
 from utils.observer import ErrorToConsoleObserver
 
 
 class OutputPorts(enum.Enum):
     BRIGHTNESS = 0
+
+
+class InputPorts(enum.Enum):
+    EXPOSURE = 0
+    POWER = 1
+    TRIGGER = 2
+    SLURRY_PUMP = 3
+    CLEAR_PUMP = 4
 
 
 class SimexIO(object):
@@ -89,7 +100,7 @@ class SimexIO(object):
             return self.instance.request_info()
 
     def _simex_enforce_port_configuration_cb(self, x: simex.SimexInfo = None):
-        if len(x.output_ports) == 1:
+        if len(x.output_ports) == 1 and len(x.input_ports) == 5:
             self.logger.debug("SimexIO initialized, start data transimittion")
             self.connected.on_next(True)
         else:
@@ -116,6 +127,21 @@ class SimexIO(object):
                 ).subscribe(ErrorToConsoleObserver()))
         )
 
+        self.instance.input_port_updated.pipe(
+            operators.observe_on(self.execution_thread),
+            operators.take_until(self._stop)
+        ).subscribe(ErrorToConsoleObserver(self.input_port_updated))
+
+    def input_port_updated(self, x: List[SimexPort]):
+        try:
+            self.subjects.simex_camera_peripheral_control.on_next(
+                CameraPeripheralControlParams(pulse_width_tick=int(x[0].data), power=int(x[1].data),
+                                              trigger=bool(x[2].data)))
+            self.subjects.simex_pump_control.on_next(
+                [int(x[3].data), int(x[4].data)]
+            )
+        except:
+            pass
 
 if __name__ == '__main__':
     def update(x=None):

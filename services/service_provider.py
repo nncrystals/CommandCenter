@@ -3,6 +3,7 @@ import typing as T
 from services import subjects, image_sources, analyzers
 from services.camera_peripheral_control import CameraPeripheralControl, SerialCameraPeripheralControl
 from services.image_encoder import ImageEncoder, JPEGEncoder
+from services.pump_control import PumpControl, ModBusPumpControl
 from services.result_processor import ResultProcessor
 from services.result_saver import ResultSaver
 from services.simex_io import SimexIO
@@ -187,3 +188,10 @@ class CameraPeripheralControlService(ServiceProvider):
     _instance: CameraPeripheralControl
 
 
+class PumpControlService(ServiceProvider):
+    interface_typing = PumpControl
+    default_type = ModBusPumpControl
+    name_mapping = {
+        "default": ModBusPumpControl
+    }
+    _instance: PumpControl

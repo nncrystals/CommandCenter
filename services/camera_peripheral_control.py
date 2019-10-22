@@ -2,8 +2,13 @@ import logging
 import traceback
 from abc import ABCMeta, abstractmethod
 
+from rx import operators, subject
+
 from services import config
 import serial
+
+import services.service_provider
+from services.subjects import Subjects
 
 
 class CameraPeripheralControlParams(object):
@@ -50,6 +55,7 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
         self.serial = serial.Serial()
         self.logger = logging.getLogger("console")
         self.stored_parameters = CameraPeripheralControlParams()
+        self._stop = subject.Subject()
 
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
@@ -60,12 +66,19 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
         ])
 
     def start(self):
+        self._stop = subject.Subject()
+
         try:
             self.serial = serial.Serial(self.config["serial_port"], baudrate=self.config["baud"])
         except Exception as ex:
             self.logger.error(f"Failed to open {self.config['serial_port']}.")
             self.logger.debug(ex)
             return
+
+        self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
+        self.subjects.simex_camera_peripheral_control.pipe(
+            operators.take_until(self._stop)
+        ).subscribe(self.simex_recv)
 
         self.logger.info("Successfully connect to camera peripheral control.")
         super().start()
@@ -138,3 +151,11 @@ class SerialCameraPeripheralControl(CameraPeripheralControl):
 
     def get_state(self):
         return self.stored_parameters
+
+    def simex_recv(self, x: CameraPeripheralControlParams):
+        if x.power is not None:
+            self.set_power(bool(x.power))
+        if x.trigger is not None:
+            self.set_trigger(bool(x.trigger))
+        if x.pulse_width_tick is not None:
+            self.set_params(x)

@@ -8,7 +8,9 @@ import traceback
 from pymodbus.client.sync import ModbusSerialClient
 from rx import scheduler, subject, operators
 
+import services
 from services import config
+from services.subjects import Subjects
 
 
 class PumpControl(object):
@@ -22,6 +24,9 @@ class PumpControl(object):
         pass
 
     def set_speed(self, slurry_speed, clear_speed):
+        pass
+
+    def get_state(self):
         pass
 
 
@@ -40,6 +45,9 @@ class ModBusPumpControl(PumpControl):
         self.logger = logging.getLogger("console")
         self.scheduler = scheduler.ThreadPoolScheduler(1)
 
+    def get_state(self):
+        return self.state
+
     @staticmethod
     @config.DefaultSettingRegistration(config_prefix)
     def default_settings(config_prefix):
@@ -54,8 +62,9 @@ class ModBusPumpControl(PumpControl):
 
     def start(self):
         if self.is_running():
+            self.logger.warning("Pump control is already running.")
             return
-
+        self._stop = subject.Subject()
         self.tq = subject.Subject()
 
         def on_next(job):
@@ -73,12 +82,22 @@ class ModBusPumpControl(PumpControl):
                                          baudrate=self.config["baud"])
         self.client.connect()
         self.enable_remote_control()
+
+        # todo switch
+        self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
+        self.subjects.simex_pump_control.pipe(
+            operators.take_until(self._stop)
+        ).subscribe(lambda x: self.set_speed(*x))
+
+
         self.running = True
+        self.logger.info("Pump control started.")
         super().start()
 
     def stop(self):
         self.tq.on_next(lambda: self.tq.on_completed())
         self.running = False
+        self.logger.info("Pump control stopped.")
         super().stop()
 
     def is_running(self) -> bool:
@@ -92,10 +111,10 @@ class ModBusPumpControl(PumpControl):
     def set_speed(self, slurry_speed, clear_speed):
         if not self.is_running():
             raise RuntimeError("Pump control is not connected")
-        if slurry_speed != self.state[0]:
+        if slurry_speed is not None and slurry_speed != self.state[0]:
             self.ctrl_pump(self.config["slurry_pump_addr"], slurry_speed)
             self.state[0] = slurry_speed
-        if clear_speed != self.state[1]:
+        if clear_speed is not None and clear_speed != self.state[1]:
             self.ctrl_pump(self.config["clear_pump_addr"], clear_speed)
             self.state[1] = clear_speed
 
