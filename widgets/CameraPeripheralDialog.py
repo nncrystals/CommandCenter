@@ -28,6 +28,7 @@ class CameraPeripheralDialog(QtWidgets.QDialog):
         self.exposure_edit = QtWidgets.QSpinBox(self)
         self.exposure_edit.setMinimum(0)
         self.exposure_edit.setSingleStep(20)
+        self.exposure_edit.setMaximum(10000)
         self.exposure_edit.setValue(state.pulse_width_tick or 0)
         self.exposure_edit.valueChanged.connect(self.exposure_updated)
         layout.addRow("Exposure", self.exposure_edit)
