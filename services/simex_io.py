@@ -69,11 +69,7 @@ class SimexIO(object):
                 self.logger.error(f"Failed to connect to SimexIO. Exception: {ex}")
                 return
 
-            self.instance.verify_compatibility().pipe(
-                operators.flat_map(self._simex_verify_version_cb),
-                operators.map(self._simex_enforce_port_configuration_cb),
-                operators.map(self._simex_configure_subscription),
-            ).subscribe(observer)
+            self._simex_configure_subscription()
 
             return Disposable(lambda: None)
 
@@ -98,15 +94,6 @@ class SimexIO(object):
         else:
             # verify port configuration
             return self.instance.request_info()
-
-    def _simex_enforce_port_configuration_cb(self, x: simex.SimexInfo = None):
-        if len(x.output_ports) == 1 and len(x.input_ports) == 5:
-            self.logger.debug("SimexIO initialized, start data transimittion")
-            self.connected.on_next(True)
-        else:
-            self.logger.error("Failed to verify SimexIO configuration. The connection will be closed.")
-            self.disconnect()
-            raise RuntimeError("Failed to verify SimexIO configuration")
 
     def _simex_connect_error_cb(self, err=None):
         self.logger.error(f"Exception occured in SimexIO validation chain: {err}")
