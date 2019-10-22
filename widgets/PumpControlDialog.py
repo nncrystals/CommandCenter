@@ -1,7 +1,8 @@
 from PySide2 import QtWidgets, QtGui, QtCore
 
 from services.pump_control import PumpControl
-from services.service_provider import PumpControlService
+from services.service_provider import PumpControlService, SubjectProvider
+from services.subjects import Subjects
 
 
 class PumpControlDialog(QtWidgets.QDialog):
@@ -10,6 +11,7 @@ class PumpControlDialog(QtWidgets.QDialog):
         super().__init__(parent)
 
         self.control: PumpControl = PumpControlService().get_or_create_instance(None)
+        self.subject: Subjects = SubjectProvider().get_or_create_instance(None)
         self.state = self.control.get_state()
 
         layout = QtWidgets.QFormLayout()
@@ -20,7 +22,7 @@ class PumpControlDialog(QtWidgets.QDialog):
         self.slurry_pump_speed.setMaximum(600.0)
         self.slurry_pump_speed.setSingleStep(0.1)
         self.slurry_pump_speed.setValue(self.state[0] or 0)
-        self.slurry_pump_speed.valueChanged.connect(lambda x: self.control.set_speed(x, None))
+        self.slurry_pump_speed.valueChanged.connect(lambda x: self.subject.pump_control.on_next((x, None)))
         layout.addRow("Slurry pump", self.slurry_pump_speed)
 
         self.clear_pump_speed = QtWidgets.QDoubleSpinBox(self)
@@ -28,7 +30,7 @@ class PumpControlDialog(QtWidgets.QDialog):
         self.clear_pump_speed.setMaximum(600.0)
         self.clear_pump_speed.setSingleStep(0.1)
         self.clear_pump_speed.setValue(self.state[1] or 0)
-        self.clear_pump_speed.valueChanged.connect(lambda x: self.control.set_speed(None, x))
+        self.clear_pump_speed.valueChanged.connect(lambda x: self.subject.pump_control.on_next((None, x)))
         layout.addRow("Clear pump", self.clear_pump_speed)
 
         self.setWindowTitle("Pump control")

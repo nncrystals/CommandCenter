@@ -85,8 +85,9 @@ class ModBusPumpControl(PumpControl):
 
         # todo switch
         self.subjects: Subjects = services.service_provider.SubjectProvider().get_or_create_instance(None)
-        self.subjects.simex_pump_control.pipe(
-            operators.take_until(self._stop)
+        self.subjects.pump_control.pipe(
+            operators.debounce(1.0),
+            operators.take_until(self._stop),
         ).subscribe(lambda x: self.set_speed(*x))
 
 
@@ -113,9 +114,11 @@ class ModBusPumpControl(PumpControl):
             raise RuntimeError("Pump control is not connected")
         if slurry_speed is not None and slurry_speed != self.state[0]:
             self.ctrl_pump(self.config["slurry_pump_addr"], slurry_speed)
+            self.logger.info(f"Slurry pump speed updated: {slurry_speed}")
             self.state[0] = slurry_speed
         if clear_speed is not None and clear_speed != self.state[1]:
             self.ctrl_pump(self.config["clear_pump_addr"], clear_speed)
+            self.logger.info(f"Clear pump speed updated: {clear_speed}")
             self.state[1] = clear_speed
 
     def enable_remote_control(self, enable=True):

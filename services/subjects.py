@@ -27,5 +27,5 @@ class Subjects(object):
     processed_distributions: typing.Subject[ProcessedDistributions, ProcessedDistributions] = subject.Subject()
     add_to_timeline: typing.Subject[TimelineDataPoint, TimelineDataPoint] = subject.Subject()
 
-    simex_camera_peripheral_control = subject.Subject()
-    simex_pump_control = subject.Subject()
+    camera_peripheral_control = subject.Subject()
+    pump_control = subject.Subject()
