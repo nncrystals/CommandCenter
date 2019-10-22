@@ -1,24 +1,20 @@
 import glob
 import logging
 import os
-import time
-from abc import abstractclassmethod
 from datetime import datetime
 from threading import Condition
-
+import time
 import cv2
 import rx
 from PySide2 import QtCore, QtWidgets
 from genicam2.gentl import TimeoutException
 from harvesters.core import Buffer
 from numpy import random
-from pyqtgraph.flowchart import Node
 from rx import operators, disposable, subject, scheduler
 from rx.scheduler import ThreadPoolScheduler
 
 import services.service_provider
 from data_class.subject_data import AcquiredImage
-from flowchart.base import register_flowchart_element, register_flowchart_source
 from services import config
 from services.subjects import Subjects
 from utils.QtScheduler import QtScheduler
@@ -154,8 +150,7 @@ class HarvestersSource(ImageSource):
             width = component.width
             height = component.height
             content = component.data.reshape(height, width)
-            time = buffer.timestamp_ns
-            self.next_image(AcquiredImage(content.copy(), time / 1e9, f"{time}.jpg"))
+            self.next_image(AcquiredImage(content.copy(), time.time(), f"{time}.jpg"))
             buffer.queue()
         except TimeoutException as ex:
             pass
