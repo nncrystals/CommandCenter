@@ -8,7 +8,6 @@ import numpy as np
 
 from data_class.detected_objects import DetectedObject
 from data_class.distribution import Distribution
-from services import service_provider
 from services.image_encoder import ImageEncoder
 
 
@@ -45,7 +44,8 @@ class AcquiredImage(object):
         return self._encoded_buffer
 
     def encode(self):
-        encoder:ImageEncoder = service_provider.ImageEncoderProvider().get_or_create_instance(None)
+        import services.service_provider
+        encoder:ImageEncoder = services.service_provider.ImageEncoderProvider().get_or_create_instance(None)
         self._encoded_buffer = encoder.encode(self.image)
         return self._encoded_buffer
 
