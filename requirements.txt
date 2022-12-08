@@ -2,7 +2,7 @@ grpc
 genicam2
 harvesters
 rx
-certifi==2019.6.16
+certifi==2022.12.7
 chardet==3.0.4
 cycler==0.10.0
 Cython==0.29.13
